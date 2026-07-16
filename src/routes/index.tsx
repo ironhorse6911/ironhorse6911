@@ -1,19 +1,90 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export const Route = createFileRoute("/")({
   component: FortressPage,
 });
 
-const threatFeed = [
-  { t: "00:00:12", src: "185.220.101.44", type: "SSH BRUTE", status: "NEUTRALIZED", tone: "neon" },
-  { t: "00:00:18", src: "internal://k8s-42", type: "ANOMALY", status: "QUARANTINED", tone: "cyan" },
-  { t: "00:00:24", src: "45.9.148.117", type: "ZERO-DAY PROBE", status: "BLOCKED", tone: "neon" },
-  { t: "00:00:31", src: "tor-exit-9a2c", type: "RECON", status: "TRAPPED", tone: "magenta" },
-  { t: "00:00:37", src: "api.prod.us-east", type: "DDOS L7", status: "ABSORBED", tone: "cyan" },
-  { t: "00:00:44", src: "104.28.7.19", type: "CREDENTIAL STUFFING", status: "NULLED", tone: "neon" },
-  { t: "00:00:51", src: "insider://svc-72", type: "PRIV ESC", status: "REVOKED", tone: "magenta" },
+/* ---------------- live threat stream types ---------------- */
+
+type Severity = "LOW" | "MED" | "HIGH" | "CRIT";
+type ThreatStatus = "ACTIVE" | "BLOCKED" | "QUARANTINED" | "ESCALATED";
+type ActionKind = "BLOCK_IP" | "QUARANTINE" | "RAISE_ALERT";
+
+type Threat = {
+  id: string;
+  ts: number;
+  src: string;
+  target: string;
+  type: string;
+  severity: Severity;
+  status: ThreatStatus;
+};
+
+type AuditEntry = {
+  id: string;
+  ts: number;
+  actor: string;
+  action: ActionKind;
+  threatId: string;
+  target: string;
+  detail: string;
+};
+
+const ATTACK_TYPES = [
+  "SSH BRUTE",
+  "ZERO-DAY PROBE",
+  "SQL INJECTION",
+  "DDOS L7",
+  "CREDENTIAL STUFF",
+  "PRIV ESC",
+  "LATERAL MOVE",
+  "EXFIL BEACON",
+  "TOR RECON",
+  "MALWARE C2",
+  "KERNEL EXPLOIT",
 ];
+const SOURCE_POOLS = [
+  "185.220.101.44",
+  "45.9.148.117",
+  "104.28.7.19",
+  "23.129.64.212",
+  "tor-exit-9a2c",
+  "cn-node-4471",
+  "ru-vpn-8823",
+  "internal://k8s-42",
+  "insider://svc-72",
+  "api.prod.us-east",
+];
+const TARGET_POOLS = [
+  "edge-gw-01",
+  "auth-svc",
+  "billing-db",
+  "k8s://prod",
+  "vault-us-east",
+  "cdn-origin",
+  "backup-store",
+  "svc-billing",
+];
+const SEVERITIES: Severity[] = ["LOW", "MED", "HIGH", "CRIT"];
+
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+function weightedSeverity(): Severity {
+  const r = Math.random();
+  if (r < 0.4) return "LOW";
+  if (r < 0.7) return "MED";
+  if (r < 0.92) return "HIGH";
+  return "CRIT";
+}
+function nid() {
+  return Math.random().toString(36).slice(2, 9).toUpperCase();
+}
+function fmtClock(ts: number) {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+}
 
 const capabilities = [
   {
