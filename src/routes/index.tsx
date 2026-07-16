@@ -171,6 +171,15 @@ function FortressPage() {
       detail: "Neural core online. Command deck armed.",
     },
   ]);
+
+  // Rolling telemetry — synced with mitigation actions
+  const [packetBars, setPacketBars] = useState<number[]>([62, 78, 55, 92, 71, 84, 66, 95, 73, 88, 79, 91]);
+  const [containBars, setContainBars] = useState<number[]>([22, 34, 41, 28, 62, 48, 55, 73, 44, 66, 51, 82]);
+  const [decepBars, setDecepBars] = useState<number[]>([10, 14, 22, 18, 34, 28, 42, 31, 55, 47, 62, 71]);
+  const [containedTotal, setContainedTotal] = useState(1204);
+  const [decepTotal, setDecepTotal] = useState(87);
+  const [packetRate, setPacketRate] = useState(18.42);
+
   const streamLiveRef = useRef(streamLive);
   streamLiveRef.current = streamLive;
 
@@ -184,7 +193,19 @@ function FortressPage() {
       setClock(`${hh}:${mm}:${ss}`);
     }, 1000);
 
-    // live threat stream
+    const teleT = setInterval(() => {
+      setPacketBars((b) => [...b.slice(1), 50 + Math.floor(Math.random() * 48)]);
+      setContainBars((b) => [
+        ...b.slice(1),
+        Math.max(10, b[b.length - 1] - 6 + Math.floor(Math.random() * 8)),
+      ]);
+      setDecepBars((b) => [
+        ...b.slice(1),
+        Math.max(6, b[b.length - 1] - 4 + Math.floor(Math.random() * 6)),
+      ]);
+      setPacketRate(16 + Math.random() * 6);
+    }, 1500);
+
     let feedT: ReturnType<typeof setTimeout>;
     const schedule = () => {
       const delay = 1600 + Math.random() * 2600;
@@ -199,8 +220,29 @@ function FortressPage() {
 
     return () => {
       clearInterval(clockT);
+      clearInterval(teleT);
       clearTimeout(feedT);
     };
+  }, []);
+
+  const bumpTelemetry = useCallback((action: ActionKind) => {
+    if (action === "BLOCK_IP" || action === "QUARANTINE") {
+      setContainBars((b) => [
+        ...b.slice(1),
+        Math.min(100, b[b.length - 1] + 18 + Math.floor(Math.random() * 12)),
+      ]);
+      setContainedTotal((n) => n + 1);
+    }
+    if (action === "RAISE_ALERT") {
+      setDecepBars((b) => [
+        ...b.slice(1),
+        Math.min(100, b[b.length - 1] + 22 + Math.floor(Math.random() * 10)),
+      ]);
+      setDecepTotal((n) => n + 1);
+    }
+    if (action === "QUARANTINE") {
+      setPacketBars((b) => [...b.slice(1), Math.min(100, 88 + Math.floor(Math.random() * 10))]);
+    }
   }, []);
 
   const runAction = useCallback(
@@ -234,20 +276,25 @@ function FortressPage() {
           ...prev,
         ].slice(0, 40),
       );
+      bumpTelemetry(action);
     },
-    [],
+    [bumpTelemetry],
   );
 
   const autoContainAll = useCallback(() => {
     setThreats((prev) => {
       const now = Date.now();
       const newAudits: AuditEntry[] = [];
+      let contained = 0;
+      let alerted = 0;
       const next = prev.map((t) => {
         if (t.status !== "ACTIVE") return t;
         const action: ActionKind =
           t.severity === "CRIT" ? "QUARANTINE" : t.severity === "HIGH" ? "BLOCK_IP" : "RAISE_ALERT";
         const nextStatus: ThreatStatus =
           action === "BLOCK_IP" ? "BLOCKED" : action === "QUARANTINE" ? "QUARANTINED" : "ESCALATED";
+        if (action === "RAISE_ALERT") alerted++;
+        else contained++;
         newAudits.push({
           id: nid(),
           ts: now,
@@ -260,8 +307,41 @@ function FortressPage() {
         return { ...t, status: nextStatus };
       });
       if (newAudits.length) setAudit((a) => [...newAudits, ...a].slice(0, 40));
+      if (contained) {
+        setContainedTotal((n) => n + contained);
+        setContainBars((b) => [
+          ...b.slice(1),
+          Math.min(100, 78 + Math.floor(Math.random() * 20)),
+        ]);
+      }
+      if (alerted) {
+        setDecepTotal((n) => n + alerted);
+        setDecepBars((b) => [
+          ...b.slice(1),
+          Math.min(100, 72 + Math.floor(Math.random() * 20)),
+        ]);
+      }
       return next;
     });
+  }, []);
+
+  const selfHeal = useCallback(() => {
+    setPacketBars((b) => [...b.slice(1), 92 + Math.floor(Math.random() * 8)]);
+    setContainBars((b) => [...b.slice(1), Math.min(100, b[b.length - 1] + 10)]);
+    setAudit((prev) =>
+      [
+        {
+          id: nid(),
+          ts: Date.now(),
+          actor: "SENTINEL/9",
+          action: "RAISE_ALERT" as ActionKind,
+          threatId: "HEAL-" + nid().slice(0, 4),
+          target: "fortress-core",
+          detail: "MEDIC: standing credentials rotated, WAF rules regenerated, enclaves resealed.",
+        },
+        ...prev,
+      ].slice(0, 40),
+    );
   }, []);
 
   const activeCount = useMemo(() => threats.filter((t) => t.status === "ACTIVE").length, [threats]);
@@ -562,30 +642,30 @@ function FortressPage() {
         <div className="mt-12 grid gap-6 lg:grid-cols-3">
           <TelemetryCard
             title="Packet inspection"
-            value="18.42M/s"
+            value={`${packetRate.toFixed(2)}M/s`}
             tone="cyan"
-            bars={[62, 78, 55, 92, 71, 84, 66, 95, 73, 88, 79, 91]}
+            bars={packetBars}
           />
           <TelemetryCard
             title="Anomalies contained"
-            value="1,204"
+            value={containedTotal.toLocaleString()}
             tone="magenta"
-            bars={[22, 34, 41, 28, 62, 48, 55, 73, 44, 66, 51, 82]}
+            bars={containBars}
           />
           <TelemetryCard
             title="Deception hits"
-            value="87"
+            value={decepTotal.toString()}
             tone="neon"
-            bars={[10, 14, 22, 18, 34, 28, 42, 31, 55, 47, 62, 71]}
+            bars={decepBars}
           />
         </div>
 
         <div className="mt-8 clip-notch border border-border/60 bg-card/40 p-6 backdrop-blur-xl">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             <span>global threat map</span>
-            <span className="text-primary">7 active fronts</span>
+            <span className="text-primary">{activeCount} active front{activeCount === 1 ? "" : "s"}</span>
           </div>
-          <ThreatMap />
+          <ThreatMap threats={threats} />
         </div>
       </section>
 
@@ -666,6 +746,13 @@ function FortressPage() {
           </div>
         </div>
       </footer>
+
+      <AgentChat
+        threats={threats}
+        onAction={runAction}
+        onAutoContain={autoContainAll}
+        onSelfHeal={selfHeal}
+      />
     </div>
   );
 }
@@ -985,25 +1072,29 @@ function TelemetryCard({
   );
 }
 
-function ThreatMap() {
-  const nodes = [
-    { x: 18, y: 42, t: "cyan" },
-    { x: 30, y: 55, t: "cyan" },
-    { x: 48, y: 38, t: "magenta" },
-    { x: 55, y: 62, t: "cyan" },
-    { x: 72, y: 45, t: "neon" },
-    { x: 82, y: 60, t: "magenta" },
-    { x: 40, y: 72, t: "neon" },
-  ];
-  const clr = (t: string) =>
-    t === "cyan"
-      ? "oklch(0.82 0.22 190)"
-      : t === "magenta"
-        ? "oklch(0.7 0.28 330)"
-        : "oklch(0.88 0.24 145)";
+function threatPos(t: Threat) {
+  let h = 2166136261;
+  const s = t.id + t.src;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  h >>>= 0;
+  return { x: 6 + (h % 86), y: 14 + ((h >>> 9) % 66) };
+}
+
+function ThreatMap({ threats }: { threats: Threat[] }) {
+  const toneFor = (t: Threat) =>
+    t.status === "ACTIVE"
+      ? { color: "oklch(0.7 0.25 20)", label: "active", pulse: true }
+      : t.status === "BLOCKED"
+        ? { color: "oklch(0.82 0.22 190)", label: "blocked", pulse: false }
+        : t.status === "QUARANTINED"
+          ? { color: "oklch(0.88 0.24 145)", label: "sealed", pulse: false }
+          : { color: "oklch(0.7 0.28 330)", label: "escalated", pulse: false };
+  const nodes = threats.map((t) => ({ t, pos: threatPos(t), tone: toneFor(t) }));
   return (
-    <div className="relative mt-4 h-64 w-full overflow-hidden border border-border/40 bg-background/40">
-      {/* grid */}
+    <div className="relative mt-4 h-72 w-full overflow-hidden border border-border/40 bg-background/40">
       <div
         className="absolute inset-0 opacity-40"
         style={{
@@ -1012,7 +1103,6 @@ function ThreatMap() {
           backgroundSize: "32px 32px",
         }}
       />
-      {/* simple continents blobs */}
       <svg viewBox="0 0 100 80" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
         <path
           d="M8,40 Q14,28 24,32 T44,36 Q52,30 58,40 T78,44 Q86,38 92,50 L90,60 Q80,66 70,60 T50,64 Q38,72 24,66 T10,58 Z"
@@ -1020,36 +1110,310 @@ function ThreatMap() {
           stroke="oklch(0.82 0.22 190 / 0.4)"
           strokeWidth="0.3"
         />
-        {/* connection arcs */}
         {nodes.slice(0, -1).map((n, i) => {
           const m = nodes[i + 1];
+          if (!m) return null;
           return (
             <line
-              key={i}
-              x1={n.x}
-              y1={n.y}
-              x2={m.x}
-              y2={m.y}
-              stroke={clr(m.t)}
+              key={n.t.id + "-" + m.t.id}
+              x1={n.pos.x}
+              y1={n.pos.y}
+              x2={m.pos.x}
+              y2={m.pos.y}
+              stroke={m.tone.color}
               strokeWidth="0.25"
               strokeDasharray="1 1"
-              opacity="0.7"
+              opacity="0.6"
             />
           );
         })}
       </svg>
-      {nodes.map((n, i) => (
+      {nodes.map(({ t, pos, tone }) => (
         <div
-          key={i}
+          key={t.id}
           className="absolute"
-          style={{ left: `${n.x}%`, top: `${n.y}%`, transform: "translate(-50%,-50%)" }}
+          style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: "translate(-50%,-50%)" }}
+          title={`${t.type} · ${t.src} → ${t.target} · ${t.status}`}
         >
           <div
-            className="h-3 w-3 rounded-full animate-pulse-ring"
-            style={{ background: clr(n.t), boxShadow: `0 0 16px ${clr(n.t)}` }}
+            className={`h-3 w-3 rounded-full ${tone.pulse ? "animate-flicker" : ""}`}
+            style={{ background: tone.color, boxShadow: `0 0 16px ${tone.color}` }}
           />
+          <div
+            className="absolute left-1/2 top-full mt-1 -translate-x-1/2 font-mono text-[8px] uppercase tracking-[0.2em] whitespace-nowrap"
+            style={{ color: tone.color }}
+          >
+            {tone.label}
+          </div>
         </div>
       ))}
+      {nodes.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+          // perimeter quiet — no fronts detected
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Agent orchestrator chat ---------------- */
+
+type ChatMsg = { id: string; role: "user" | "agent" | "sys"; text: string; agent?: string };
+
+const SUB_AGENTS = ["SENTRY", "HUNTER", "WARDEN", "REFLEX", "MEDIC"] as const;
+
+function AgentChat({
+  threats,
+  onAction,
+  onAutoContain,
+  onSelfHeal,
+}: {
+  threats: Threat[];
+  onAction: (t: Threat, a: ActionKind, actor: "AGENT" | "OPERATOR") => void;
+  onAutoContain: () => void;
+  onSelfHeal: () => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const [input, setInput] = useState("");
+  const [msgs, setMsgs] = useState<ChatMsg[]>([
+    {
+      id: nid(),
+      role: "sys",
+      text: "SENTINEL/9 orchestrator online. Sub-agents synced: SENTRY · HUNTER · WARDEN · REFLEX · MEDIC.",
+    },
+    {
+      id: nid(),
+      role: "agent",
+      agent: "SENTINEL/9",
+      text: "I have live command of the fortress. Ask for a sitrep, say 'contain all', 'self-heal', or 'block <id>'.",
+    },
+  ]);
+  const [thinking, setThinking] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const threatsRef = useRef(threats);
+  threatsRef.current = threats;
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [msgs, thinking]);
+
+  const respond = useCallback(
+    (raw: string) => {
+      const text = raw.trim();
+      if (!text) return;
+      const q = text.toLowerCase();
+      const push = (role: ChatMsg["role"], t: string, agent?: string) =>
+        setMsgs((m) => [...m, { id: nid(), role, text: t, agent }]);
+      push("user", text);
+      setThinking(true);
+
+      setTimeout(() => {
+        setThinking(false);
+        const live = threatsRef.current;
+        const active = live.filter((t) => t.status === "ACTIVE");
+        const crit = active.filter((t) => t.severity === "CRIT" || t.severity === "HIGH");
+
+        if (/^(hi|hello|hey|yo)\b/.test(q)) {
+          return push("agent", "Operator, I'm listening.", "SENTINEL/9");
+        }
+        if (/who are you|help|what can|command/.test(q)) {
+          return push(
+            "agent",
+            "I'm SENTINEL/9 — orchestrator over five specialist sub-agents:\n• SENTRY — perimeter WAF + eBPF filters\n• HUNTER — behavioral intent modeling\n• WARDEN — identity, keys, enclaves\n• REFLEX — containment runbooks\n• MEDIC — self-heal + rollback\n\nTry: 'sitrep' · 'contain all' · 'self-heal' · 'block <id>' · 'quarantine <id>'.",
+            "SENTINEL/9",
+          );
+        }
+        if (/sitrep|status|report|situation/.test(q)) {
+          if (!active.length)
+            return push(
+              "agent",
+              "Perimeter nominal. No active fronts. Deception mesh baiting quietly.",
+              "HUNTER",
+            );
+          const top = active[0];
+          return push(
+            "agent",
+            `${active.length} active front${active.length > 1 ? "s" : ""} · ${crit.length} HIGH/CRIT. Priority: ${top.type} from ${top.src} → ${top.target} (${top.severity}, id ${top.id}). REFLEX armed.`,
+            "HUNTER",
+          );
+        }
+        if (/contain all|auto.?contain|lock ?down|seal all|neutralize/.test(q)) {
+          if (!active.length) return push("agent", "Nothing to contain — wire is calm.", "REFLEX");
+          push(
+            "agent",
+            `Executing runbooks on ${active.length} front${active.length > 1 ? "s" : ""}. CRIT→quarantine, HIGH→block, else raise.`,
+            "REFLEX",
+          );
+          onAutoContain();
+          setTimeout(
+            () =>
+              push(
+                "agent",
+                "Containment complete. Threat map + telemetry synced. Audit trail updated.",
+                "SENTINEL/9",
+              ),
+            700,
+          );
+          return;
+        }
+        if (/self.?heal|heal fortress|rotate keys|regenerate|patch/.test(q)) {
+          push(
+            "agent",
+            "Rotating standing credentials. Regenerating WAF rules per attacker fingerprint. Enclaves resealed.",
+            "MEDIC",
+          );
+          onSelfHeal();
+          return;
+        }
+        const blockM = q.match(/block\s+([a-z0-9]+)/i);
+        const qM = q.match(/quarantine\s+([a-z0-9]+)/i);
+        const alertM = q.match(/(?:alert|escalate)\s+([a-z0-9]+)/i);
+        const targetId = (blockM?.[1] || qM?.[1] || alertM?.[1] || "").toUpperCase();
+        if (targetId) {
+          const t = live.find((x) => x.id.toUpperCase() === targetId);
+          if (!t) return push("agent", `No threat with id ${targetId} in queue.`, "SENTINEL/9");
+          if (t.status !== "ACTIVE")
+            return push("agent", `Threat ${targetId} already ${t.status.toLowerCase()}.`, "SENTINEL/9");
+          const kind: ActionKind = blockM ? "BLOCK_IP" : qM ? "QUARANTINE" : "RAISE_ALERT";
+          onAction(t, kind, "AGENT");
+          return push(
+            "agent",
+            kind === "BLOCK_IP"
+              ? `Nulled ${t.src} at the edge.`
+              : kind === "QUARANTINE"
+                ? `Sealed ${t.target}. Keys rotated.`
+                : `Alert opened for ${t.id}.`,
+            kind === "BLOCK_IP" ? "SENTRY" : kind === "QUARANTINE" ? "WARDEN" : "HUNTER",
+          );
+        }
+        if (/zero.?trust|identity|key/.test(q)) {
+          return push(
+            "agent",
+            "Zero standing keys. Hardware-attested identity per workload, rotated on suspicion — not schedule.",
+            "WARDEN",
+          );
+        }
+        if (/exfil|c2|leak|egress/.test(q)) {
+          return push(
+            "agent",
+            "Every socket watched. Off-baseline beacon → credential yanked mid-flight.",
+            "WARDEN",
+          );
+        }
+        if (/threat|attack|breach|hunt/.test(q)) {
+          return push(
+            "agent",
+            active.length
+              ? `Top signal: ${active[0].type} — matched against my kill-chain library. Try 'block ${active[0].id}' or 'contain all'.`
+              : "No active threats. Deception mesh idling.",
+            "HUNTER",
+          );
+        }
+        push(
+          "agent",
+          "Copy. Routing to the right sub-agent. Intent over signatures, containment over alerts — the fortress rewrites itself faster than the adversary can pivot.",
+          "SENTINEL/9",
+        );
+      }, 450 + Math.random() * 350);
+    },
+    [onAction, onAutoContain, onSelfHeal],
+  );
+
+  return (
+    <div className={`fixed bottom-4 right-4 z-40 ${open ? "w-[min(420px,92vw)]" : "w-auto"}`}>
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          className="clip-notch flex items-center gap-3 border border-primary/60 bg-primary/15 px-4 py-3 text-xs font-bold uppercase tracking-[0.25em] text-primary shadow-neon-cyan backdrop-blur-xl"
+        >
+          <span className="h-2 w-2 animate-flicker rounded-full bg-neon shadow-neon-green" />
+          Hail SENTINEL/9
+        </button>
+      )}
+      {open && (
+        <div className="clip-notch flex h-[540px] flex-col border border-primary/40 bg-black/85 shadow-neon-cyan backdrop-blur-xl">
+          <div className="flex items-center justify-between border-b border-border/60 px-4 py-3 text-[10px] uppercase tracking-[0.3em]">
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 animate-flicker rounded-full bg-neon shadow-neon-green" />
+              <span className="text-primary text-glow-cyan">SENTINEL/9 · orchestrator</span>
+            </div>
+            <button
+              onClick={() => setOpen(false)}
+              className="text-muted-foreground hover:text-primary"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="grid grid-cols-5 gap-1 border-b border-border/60 bg-background/40 px-3 py-2 text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+            {SUB_AGENTS.map((n) => (
+              <div key={n} className="flex flex-col items-center gap-1">
+                <span className="h-1 w-1 animate-flicker rounded-full bg-neon shadow-neon-green" />
+                <span>{n}</span>
+              </div>
+            ))}
+          </div>
+          <div
+            ref={scrollRef}
+            className="flex-1 space-y-3 overflow-y-auto px-4 py-3 font-mono text-xs leading-relaxed"
+          >
+            {msgs.map((m) => (
+              <div key={m.id}>
+                {m.role === "sys" && <div className="text-muted-foreground">// {m.text}</div>}
+                {m.role === "user" && (
+                  <div className="text-primary text-glow-cyan">&gt; {m.text}</div>
+                )}
+                {m.role === "agent" && (
+                  <div className="text-foreground/90">
+                    <span className="mr-2 text-accent">[{m.agent ?? "SENTINEL/9"}]</span>
+                    <span className="whitespace-pre-line">{m.text}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+            {thinking && (
+              <div className="text-neon">
+                <span className="mr-2 text-accent">[SENTINEL/9]</span>
+                <span className="inline-block h-3 w-2 animate-flicker bg-neon align-middle" /> analyzing…
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1 border-t border-border/60 bg-background/30 px-3 py-2">
+            {["sitrep", "contain all", "self-heal"].map((q) => (
+              <button
+                key={q}
+                onClick={() => respond(q)}
+                className="clip-notch border border-border/60 bg-background/40 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground hover:border-primary/60 hover:text-primary"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!input.trim()) return;
+              respond(input);
+              setInput("");
+            }}
+            className="flex items-center gap-2 border-t border-border/60 bg-background/40 px-3 py-2"
+          >
+            <span className="font-mono text-xs text-primary">&gt;</span>
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="ask the agent…"
+              className="flex-1 bg-transparent font-mono text-xs text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            <button
+              type="submit"
+              className="clip-notch border border-primary/60 bg-primary/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-primary"
+            >
+              send
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
