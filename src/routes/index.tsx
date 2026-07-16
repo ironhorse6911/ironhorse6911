@@ -1,19 +1,90 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export const Route = createFileRoute("/")({
   component: FortressPage,
 });
 
-const threatFeed = [
-  { t: "00:00:12", src: "185.220.101.44", type: "SSH BRUTE", status: "NEUTRALIZED", tone: "neon" },
-  { t: "00:00:18", src: "internal://k8s-42", type: "ANOMALY", status: "QUARANTINED", tone: "cyan" },
-  { t: "00:00:24", src: "45.9.148.117", type: "ZERO-DAY PROBE", status: "BLOCKED", tone: "neon" },
-  { t: "00:00:31", src: "tor-exit-9a2c", type: "RECON", status: "TRAPPED", tone: "magenta" },
-  { t: "00:00:37", src: "api.prod.us-east", type: "DDOS L7", status: "ABSORBED", tone: "cyan" },
-  { t: "00:00:44", src: "104.28.7.19", type: "CREDENTIAL STUFFING", status: "NULLED", tone: "neon" },
-  { t: "00:00:51", src: "insider://svc-72", type: "PRIV ESC", status: "REVOKED", tone: "magenta" },
+/* ---------------- live threat stream types ---------------- */
+
+type Severity = "LOW" | "MED" | "HIGH" | "CRIT";
+type ThreatStatus = "ACTIVE" | "BLOCKED" | "QUARANTINED" | "ESCALATED";
+type ActionKind = "BLOCK_IP" | "QUARANTINE" | "RAISE_ALERT";
+
+type Threat = {
+  id: string;
+  ts: number;
+  src: string;
+  target: string;
+  type: string;
+  severity: Severity;
+  status: ThreatStatus;
+};
+
+type AuditEntry = {
+  id: string;
+  ts: number;
+  actor: string;
+  action: ActionKind;
+  threatId: string;
+  target: string;
+  detail: string;
+};
+
+const ATTACK_TYPES = [
+  "SSH BRUTE",
+  "ZERO-DAY PROBE",
+  "SQL INJECTION",
+  "DDOS L7",
+  "CREDENTIAL STUFF",
+  "PRIV ESC",
+  "LATERAL MOVE",
+  "EXFIL BEACON",
+  "TOR RECON",
+  "MALWARE C2",
+  "KERNEL EXPLOIT",
 ];
+const SOURCE_POOLS = [
+  "185.220.101.44",
+  "45.9.148.117",
+  "104.28.7.19",
+  "23.129.64.212",
+  "tor-exit-9a2c",
+  "cn-node-4471",
+  "ru-vpn-8823",
+  "internal://k8s-42",
+  "insider://svc-72",
+  "api.prod.us-east",
+];
+const TARGET_POOLS = [
+  "edge-gw-01",
+  "auth-svc",
+  "billing-db",
+  "k8s://prod",
+  "vault-us-east",
+  "cdn-origin",
+  "backup-store",
+  "svc-billing",
+];
+const SEVERITIES: Severity[] = ["LOW", "MED", "HIGH", "CRIT"];
+
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+function weightedSeverity(): Severity {
+  const r = Math.random();
+  if (r < 0.4) return "LOW";
+  if (r < 0.7) return "MED";
+  if (r < 0.92) return "HIGH";
+  return "CRIT";
+}
+function nid() {
+  return Math.random().toString(36).slice(2, 9).toUpperCase();
+}
+function fmtClock(ts: number) {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+}
 
 const capabilities = [
   {
@@ -70,22 +141,130 @@ const agentLog = [
   { role: "agent", text: "Keys rotated. Enclave sealed. Threat neutralized in 1.4s. Incident #C-7742 archived." },
 ];
 
+function seedThreat(now: number): Threat {
+  return {
+    id: nid(),
+    ts: now,
+    src: pick(SOURCE_POOLS),
+    target: pick(TARGET_POOLS),
+    type: pick(ATTACK_TYPES),
+    severity: weightedSeverity(),
+    status: "ACTIVE",
+  };
+}
+
 function FortressPage() {
   const [clock, setClock] = useState("00:00:00");
-  const [feedIdx, setFeedIdx] = useState(0);
+  const [streamLive, setStreamLive] = useState(true);
+  const [threats, setThreats] = useState<Threat[]>(() => {
+    const now = Date.now();
+    return Array.from({ length: 5 }, (_, i) => seedThreat(now - i * 3200));
+  });
+  const [audit, setAudit] = useState<AuditEntry[]>([
+    {
+      id: nid(),
+      ts: Date.now(),
+      actor: "SENTINEL/9",
+      action: "RAISE_ALERT",
+      threatId: "BOOT-000",
+      target: "fortress-core",
+      detail: "Neural core online. Command deck armed.",
+    },
+  ]);
+  const streamLiveRef = useRef(streamLive);
+  streamLiveRef.current = streamLive;
 
   useEffect(() => {
     const start = Date.now();
-    const t = setInterval(() => {
+    const clockT = setInterval(() => {
       const s = Math.floor((Date.now() - start) / 1000);
       const hh = String(Math.floor(s / 3600)).padStart(2, "0");
       const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
       const ss = String(s % 60).padStart(2, "0");
       setClock(`${hh}:${mm}:${ss}`);
-      setFeedIdx((i) => (i + 1) % threatFeed.length);
     }, 1000);
-    return () => clearInterval(t);
+
+    // live threat stream
+    let feedT: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      const delay = 1600 + Math.random() * 2600;
+      feedT = setTimeout(() => {
+        if (streamLiveRef.current) {
+          setThreats((prev) => [seedThreat(Date.now()), ...prev].slice(0, 10));
+        }
+        schedule();
+      }, delay);
+    };
+    schedule();
+
+    return () => {
+      clearInterval(clockT);
+      clearTimeout(feedT);
+    };
   }, []);
+
+  const runAction = useCallback(
+    (threat: Threat, action: ActionKind, actor: "AGENT" | "OPERATOR") => {
+      const nextStatus: ThreatStatus =
+        action === "BLOCK_IP"
+          ? "BLOCKED"
+          : action === "QUARANTINE"
+            ? "QUARANTINED"
+            : "ESCALATED";
+      const detail =
+        action === "BLOCK_IP"
+          ? `Egress + ingress from ${threat.src} nulled at edge.`
+          : action === "QUARANTINE"
+              ? `Host ${threat.target} sealed in enclave. Credentials rotated.`
+              : `Alert routed to on-call. Incident #${threat.id} opened.`;
+      setThreats((prev) =>
+        prev.map((t) => (t.id === threat.id ? { ...t, status: nextStatus } : t)),
+      );
+      setAudit((prev) =>
+        [
+          {
+            id: nid(),
+            ts: Date.now(),
+            actor: actor === "AGENT" ? "SENTINEL/9" : "OPERATOR",
+            action,
+            threatId: threat.id,
+            target: action === "BLOCK_IP" ? threat.src : threat.target,
+            detail,
+          },
+          ...prev,
+        ].slice(0, 40),
+      );
+    },
+    [],
+  );
+
+  const autoContainAll = useCallback(() => {
+    setThreats((prev) => {
+      const now = Date.now();
+      const newAudits: AuditEntry[] = [];
+      const next = prev.map((t) => {
+        if (t.status !== "ACTIVE") return t;
+        const action: ActionKind =
+          t.severity === "CRIT" ? "QUARANTINE" : t.severity === "HIGH" ? "BLOCK_IP" : "RAISE_ALERT";
+        const nextStatus: ThreatStatus =
+          action === "BLOCK_IP" ? "BLOCKED" : action === "QUARANTINE" ? "QUARANTINED" : "ESCALATED";
+        newAudits.push({
+          id: nid(),
+          ts: now,
+          actor: "SENTINEL/9",
+          action,
+          threatId: t.id,
+          target: action === "BLOCK_IP" ? t.src : t.target,
+          detail: `Auto-runbook executed on ${t.severity} threat ${t.type}.`,
+        });
+        return { ...t, status: nextStatus };
+      });
+      if (newAudits.length) setAudit((a) => [...newAudits, ...a].slice(0, 40));
+      return next;
+    });
+  }, []);
+
+  const activeCount = useMemo(() => threats.filter((t) => t.status === "ACTIVE").length, [threats]);
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -185,35 +364,81 @@ function FortressPage() {
           </div>
         </div>
 
-        {/* Threat ticker bar */}
-        <div className="mt-16 clip-notch border border-border/60 bg-card/40 backdrop-blur-xl">
-          <div className="flex items-center border-b border-border/60 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            <span className="mr-3 h-1.5 w-1.5 animate-flicker rounded-full bg-neon shadow-neon-green" />
-            live threat feed
-            <span className="ml-auto font-mono text-primary">UPTIME {clock}</span>
+        {/* COMMAND DECK — live threat stream + audit trail */}
+        <div id="command" className="mt-16 grid gap-6 lg:grid-cols-[1.35fr_1fr]">
+          {/* Live stream */}
+          <div className="clip-notch border border-border/60 bg-card/40 backdrop-blur-xl">
+            <div className="flex flex-wrap items-center gap-3 border-b border-border/60 px-4 py-3 text-[10px] uppercase tracking-[0.3em]">
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  streamLive ? "bg-neon shadow-neon-green animate-flicker" : "bg-muted-foreground"
+                }`}
+              />
+              <span className="text-muted-foreground">live threat stream</span>
+              <span className="text-primary">· {activeCount} active</span>
+              <span className="ml-auto flex items-center gap-2">
+                <span className="font-mono text-primary">UPTIME {clock}</span>
+                <button
+                  onClick={() => setStreamLive((v) => !v)}
+                  className={`clip-notch border px-3 py-1 text-[10px] font-bold tracking-[0.25em] transition-colors ${
+                    streamLive
+                      ? "border-neon/60 bg-neon/10 text-neon"
+                      : "border-danger/60 bg-danger/10 text-danger"
+                  }`}
+                >
+                  {streamLive ? "◉ streaming" : "◯ paused"}
+                </button>
+                <button
+                  onClick={autoContainAll}
+                  disabled={activeCount === 0}
+                  className="clip-notch border border-primary/60 bg-primary/10 px-3 py-1 text-[10px] font-bold tracking-[0.25em] text-primary transition-colors hover:bg-primary/20 disabled:opacity-30"
+                >
+                  agent auto-contain
+                </button>
+              </span>
+            </div>
+
+            <ul className="max-h-[520px] divide-y divide-border/60 overflow-y-auto">
+              {threats.map((t) => (
+                <ThreatRow key={t.id} threat={t} onAction={runAction} />
+              ))}
+            </ul>
           </div>
-          <div className="grid grid-cols-1 divide-y divide-border/60 md:grid-cols-4 md:divide-x md:divide-y-0">
-            {[0, 1, 2, 3].map((offset) => {
-              const item = threatFeed[(feedIdx + offset) % threatFeed.length];
-              const toneClass =
-                item.tone === "neon"
-                  ? "text-neon"
-                  : item.tone === "magenta"
-                    ? "text-accent"
-                    : "text-primary";
-              return (
-                <div key={offset} className="p-4 font-mono text-xs">
-                  <div className="text-muted-foreground">T+{item.t}</div>
-                  <div className="mt-1 truncate text-foreground">{item.src}</div>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-muted-foreground">{item.type}</span>
-                    <span className={`font-bold ${toneClass}`}>{item.status}</span>
+
+          {/* Audit trail */}
+          <div className="clip-notch border border-accent/30 bg-black/50 backdrop-blur-xl">
+            <div className="flex items-center justify-between border-b border-border/60 px-4 py-3 text-[10px] uppercase tracking-[0.3em]">
+              <span className="text-accent">audit trail // append-only</span>
+              <span className="text-muted-foreground">{audit.length} entries</span>
+            </div>
+            <ol className="max-h-[520px] overflow-y-auto p-4 font-mono text-[11px] leading-relaxed">
+              {audit.map((a) => (
+                <li key={a.id} className="mb-3 border-l-2 border-accent/40 pl-3">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <span className="text-primary">{fmtClock(a.ts)}</span>
+                    <span>·</span>
+                    <span className={a.actor === "OPERATOR" ? "text-accent" : "text-neon"}>
+                      {a.actor}
+                    </span>
+                    <span>·</span>
+                    <span className="text-foreground">{a.action}</span>
                   </div>
-                </div>
-              );
-            })}
+                  <div className="mt-1 text-foreground/80">
+                    <span className="text-muted-foreground">→ {a.target}</span>{" "}
+                    <span className="text-muted-foreground/70">
+                      [thr:{a.threatId}]
+                    </span>
+                  </div>
+                  <div className="mt-1 text-muted-foreground">{a.detail}</div>
+                </li>
+              ))}
+              {audit.length === 0 && (
+                <li className="text-muted-foreground">// no actions recorded</li>
+              )}
+            </ol>
           </div>
         </div>
+
       </section>
 
       {/* AGENT CONSOLE */}
@@ -446,6 +671,74 @@ function FortressPage() {
 }
 
 /* -------------------------- sub components -------------------------- */
+
+function ThreatRow({
+  threat,
+  onAction,
+}: {
+  threat: Threat;
+  onAction: (t: Threat, a: ActionKind, actor: "AGENT" | "OPERATOR") => void;
+}) {
+  const sevColor: Record<Severity, string> = {
+    LOW: "border-muted-foreground/40 bg-muted-foreground/10 text-muted-foreground",
+    MED: "border-primary/50 bg-primary/10 text-primary",
+    HIGH: "border-accent/50 bg-accent/10 text-accent",
+    CRIT: "border-danger/60 bg-danger/15 text-danger animate-flicker",
+  };
+  const statusColor: Record<ThreatStatus, string> = {
+    ACTIVE: "text-danger",
+    BLOCKED: "text-primary",
+    QUARANTINED: "text-neon",
+    ESCALATED: "text-accent",
+  };
+  const isActive = threat.status === "ACTIVE";
+  return (
+    <li className="grid gap-3 p-4 font-mono text-xs sm:grid-cols-[auto_1fr_auto] sm:items-center">
+      <div className="flex items-center gap-3">
+        <span
+          className={`clip-notch border px-2 py-0.5 text-[10px] font-bold tracking-[0.2em] ${sevColor[threat.severity]}`}
+        >
+          {threat.severity}
+        </span>
+        <span className="text-muted-foreground">{fmtClock(threat.ts)}</span>
+      </div>
+      <div className="min-w-0">
+        <div className="truncate text-foreground">
+          {threat.type} <span className="text-muted-foreground">·</span> {threat.src}{" "}
+          <span className="text-muted-foreground">→</span> {threat.target}
+        </div>
+        <div className="mt-0.5 flex items-center gap-2 text-[10px] uppercase tracking-[0.25em]">
+          <span className="text-muted-foreground">status</span>
+          <span className={`font-bold ${statusColor[threat.status]}`}>{threat.status}</span>
+          <span className="text-muted-foreground">· id {threat.id}</span>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1.5 sm:justify-end">
+        <button
+          disabled={!isActive}
+          onClick={() => onAction(threat, "BLOCK_IP", "OPERATOR")}
+          className="clip-notch border border-primary/60 bg-primary/10 px-2.5 py-1 text-[10px] font-bold tracking-[0.2em] text-primary transition-colors hover:bg-primary/25 disabled:opacity-30"
+        >
+          block ip
+        </button>
+        <button
+          disabled={!isActive}
+          onClick={() => onAction(threat, "QUARANTINE", "OPERATOR")}
+          className="clip-notch border border-neon/60 bg-neon/10 px-2.5 py-1 text-[10px] font-bold tracking-[0.2em] text-neon transition-colors hover:bg-neon/25 disabled:opacity-30"
+        >
+          quarantine
+        </button>
+        <button
+          disabled={!isActive}
+          onClick={() => onAction(threat, "RAISE_ALERT", "OPERATOR")}
+          className="clip-notch border border-accent/60 bg-accent/10 px-2.5 py-1 text-[10px] font-bold tracking-[0.2em] text-accent transition-colors hover:bg-accent/25 disabled:opacity-30"
+        >
+          raise alert
+        </button>
+      </div>
+    </li>
+  );
+}
 
 function SectionHeader({ num, title, sub }: { num: string; title: string; sub: string }) {
   return (
