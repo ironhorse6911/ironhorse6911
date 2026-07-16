@@ -642,30 +642,30 @@ function FortressPage() {
         <div className="mt-12 grid gap-6 lg:grid-cols-3">
           <TelemetryCard
             title="Packet inspection"
-            value="18.42M/s"
+            value={`${packetRate.toFixed(2)}M/s`}
             tone="cyan"
-            bars={[62, 78, 55, 92, 71, 84, 66, 95, 73, 88, 79, 91]}
+            bars={packetBars}
           />
           <TelemetryCard
             title="Anomalies contained"
-            value="1,204"
+            value={containedTotal.toLocaleString()}
             tone="magenta"
-            bars={[22, 34, 41, 28, 62, 48, 55, 73, 44, 66, 51, 82]}
+            bars={containBars}
           />
           <TelemetryCard
             title="Deception hits"
-            value="87"
+            value={decepTotal.toString()}
             tone="neon"
-            bars={[10, 14, 22, 18, 34, 28, 42, 31, 55, 47, 62, 71]}
+            bars={decepBars}
           />
         </div>
 
         <div className="mt-8 clip-notch border border-border/60 bg-card/40 p-6 backdrop-blur-xl">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             <span>global threat map</span>
-            <span className="text-primary">7 active fronts</span>
+            <span className="text-primary">{activeCount} active front{activeCount === 1 ? "" : "s"}</span>
           </div>
-          <ThreatMap />
+          <ThreatMap threats={threats} />
         </div>
       </section>
 
