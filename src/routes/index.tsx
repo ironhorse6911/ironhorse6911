@@ -746,6 +746,13 @@ function FortressPage() {
           </div>
         </div>
       </footer>
+
+      <AgentChat
+        threats={threats}
+        onAction={runAction}
+        onAutoContain={autoContainAll}
+        onSelfHeal={selfHeal}
+      />
     </div>
   );
 }
