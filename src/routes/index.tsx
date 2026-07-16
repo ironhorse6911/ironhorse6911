@@ -364,35 +364,81 @@ function FortressPage() {
           </div>
         </div>
 
-        {/* Threat ticker bar */}
-        <div className="mt-16 clip-notch border border-border/60 bg-card/40 backdrop-blur-xl">
-          <div className="flex items-center border-b border-border/60 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            <span className="mr-3 h-1.5 w-1.5 animate-flicker rounded-full bg-neon shadow-neon-green" />
-            live threat feed
-            <span className="ml-auto font-mono text-primary">UPTIME {clock}</span>
+        {/* COMMAND DECK — live threat stream + audit trail */}
+        <div id="command" className="mt-16 grid gap-6 lg:grid-cols-[1.35fr_1fr]">
+          {/* Live stream */}
+          <div className="clip-notch border border-border/60 bg-card/40 backdrop-blur-xl">
+            <div className="flex flex-wrap items-center gap-3 border-b border-border/60 px-4 py-3 text-[10px] uppercase tracking-[0.3em]">
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  streamLive ? "bg-neon shadow-neon-green animate-flicker" : "bg-muted-foreground"
+                }`}
+              />
+              <span className="text-muted-foreground">live threat stream</span>
+              <span className="text-primary">· {activeCount} active</span>
+              <span className="ml-auto flex items-center gap-2">
+                <span className="font-mono text-primary">UPTIME {clock}</span>
+                <button
+                  onClick={() => setStreamLive((v) => !v)}
+                  className={`clip-notch border px-3 py-1 text-[10px] font-bold tracking-[0.25em] transition-colors ${
+                    streamLive
+                      ? "border-neon/60 bg-neon/10 text-neon"
+                      : "border-danger/60 bg-danger/10 text-danger"
+                  }`}
+                >
+                  {streamLive ? "◉ streaming" : "◯ paused"}
+                </button>
+                <button
+                  onClick={autoContainAll}
+                  disabled={activeCount === 0}
+                  className="clip-notch border border-primary/60 bg-primary/10 px-3 py-1 text-[10px] font-bold tracking-[0.25em] text-primary transition-colors hover:bg-primary/20 disabled:opacity-30"
+                >
+                  agent auto-contain
+                </button>
+              </span>
+            </div>
+
+            <ul className="max-h-[520px] divide-y divide-border/60 overflow-y-auto">
+              {threats.map((t) => (
+                <ThreatRow key={t.id} threat={t} onAction={runAction} />
+              ))}
+            </ul>
           </div>
-          <div className="grid grid-cols-1 divide-y divide-border/60 md:grid-cols-4 md:divide-x md:divide-y-0">
-            {[0, 1, 2, 3].map((offset) => {
-              const item = threatFeed[(feedIdx + offset) % threatFeed.length];
-              const toneClass =
-                item.tone === "neon"
-                  ? "text-neon"
-                  : item.tone === "magenta"
-                    ? "text-accent"
-                    : "text-primary";
-              return (
-                <div key={offset} className="p-4 font-mono text-xs">
-                  <div className="text-muted-foreground">T+{item.t}</div>
-                  <div className="mt-1 truncate text-foreground">{item.src}</div>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-muted-foreground">{item.type}</span>
-                    <span className={`font-bold ${toneClass}`}>{item.status}</span>
+
+          {/* Audit trail */}
+          <div className="clip-notch border border-accent/30 bg-black/50 backdrop-blur-xl">
+            <div className="flex items-center justify-between border-b border-border/60 px-4 py-3 text-[10px] uppercase tracking-[0.3em]">
+              <span className="text-accent">audit trail // append-only</span>
+              <span className="text-muted-foreground">{audit.length} entries</span>
+            </div>
+            <ol className="max-h-[520px] overflow-y-auto p-4 font-mono text-[11px] leading-relaxed">
+              {audit.map((a) => (
+                <li key={a.id} className="mb-3 border-l-2 border-accent/40 pl-3">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <span className="text-primary">{fmtClock(a.ts)}</span>
+                    <span>·</span>
+                    <span className={a.actor === "OPERATOR" ? "text-accent" : "text-neon"}>
+                      {a.actor}
+                    </span>
+                    <span>·</span>
+                    <span className="text-foreground">{a.action}</span>
                   </div>
-                </div>
-              );
-            })}
+                  <div className="mt-1 text-foreground/80">
+                    <span className="text-muted-foreground">→ {a.target}</span>{" "}
+                    <span className="text-muted-foreground/70">
+                      [thr:{a.threatId}]
+                    </span>
+                  </div>
+                  <div className="mt-1 text-muted-foreground">{a.detail}</div>
+                </li>
+              ))}
+              {audit.length === 0 && (
+                <li className="text-muted-foreground">// no actions recorded</li>
+              )}
+            </ol>
           </div>
         </div>
+
       </section>
 
       {/* AGENT CONSOLE */}
