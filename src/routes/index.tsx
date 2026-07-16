@@ -141,22 +141,130 @@ const agentLog = [
   { role: "agent", text: "Keys rotated. Enclave sealed. Threat neutralized in 1.4s. Incident #C-7742 archived." },
 ];
 
+function seedThreat(now: number): Threat {
+  return {
+    id: nid(),
+    ts: now,
+    src: pick(SOURCE_POOLS),
+    target: pick(TARGET_POOLS),
+    type: pick(ATTACK_TYPES),
+    severity: weightedSeverity(),
+    status: "ACTIVE",
+  };
+}
+
 function FortressPage() {
   const [clock, setClock] = useState("00:00:00");
-  const [feedIdx, setFeedIdx] = useState(0);
+  const [streamLive, setStreamLive] = useState(true);
+  const [threats, setThreats] = useState<Threat[]>(() => {
+    const now = Date.now();
+    return Array.from({ length: 5 }, (_, i) => seedThreat(now - i * 3200));
+  });
+  const [audit, setAudit] = useState<AuditEntry[]>([
+    {
+      id: nid(),
+      ts: Date.now(),
+      actor: "SENTINEL/9",
+      action: "RAISE_ALERT",
+      threatId: "BOOT-000",
+      target: "fortress-core",
+      detail: "Neural core online. Command deck armed.",
+    },
+  ]);
+  const streamLiveRef = useRef(streamLive);
+  streamLiveRef.current = streamLive;
 
   useEffect(() => {
     const start = Date.now();
-    const t = setInterval(() => {
+    const clockT = setInterval(() => {
       const s = Math.floor((Date.now() - start) / 1000);
       const hh = String(Math.floor(s / 3600)).padStart(2, "0");
       const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
       const ss = String(s % 60).padStart(2, "0");
       setClock(`${hh}:${mm}:${ss}`);
-      setFeedIdx((i) => (i + 1) % threatFeed.length);
     }, 1000);
-    return () => clearInterval(t);
+
+    // live threat stream
+    let feedT: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      const delay = 1600 + Math.random() * 2600;
+      feedT = setTimeout(() => {
+        if (streamLiveRef.current) {
+          setThreats((prev) => [seedThreat(Date.now()), ...prev].slice(0, 10));
+        }
+        schedule();
+      }, delay);
+    };
+    schedule();
+
+    return () => {
+      clearInterval(clockT);
+      clearTimeout(feedT);
+    };
   }, []);
+
+  const runAction = useCallback(
+    (threat: Threat, action: ActionKind, actor: "AGENT" | "OPERATOR") => {
+      const nextStatus: ThreatStatus =
+        action === "BLOCK_IP"
+          ? "BLOCKED"
+          : action === "QUARANTINE"
+            ? "QUARANTINED"
+            : "ESCALATED";
+      const detail =
+        action === "BLOCK_IP"
+          ? `Egress + ingress from ${threat.src} nulled at edge.`
+          : action === "QUARANTINE"
+              ? `Host ${threat.target} sealed in enclave. Credentials rotated.`
+              : `Alert routed to on-call. Incident #${threat.id} opened.`;
+      setThreats((prev) =>
+        prev.map((t) => (t.id === threat.id ? { ...t, status: nextStatus } : t)),
+      );
+      setAudit((prev) =>
+        [
+          {
+            id: nid(),
+            ts: Date.now(),
+            actor: actor === "AGENT" ? "SENTINEL/9" : "OPERATOR",
+            action,
+            threatId: threat.id,
+            target: action === "BLOCK_IP" ? threat.src : threat.target,
+            detail,
+          },
+          ...prev,
+        ].slice(0, 40),
+      );
+    },
+    [],
+  );
+
+  const autoContainAll = useCallback(() => {
+    setThreats((prev) => {
+      const now = Date.now();
+      const newAudits: AuditEntry[] = [];
+      const next = prev.map((t) => {
+        if (t.status !== "ACTIVE") return t;
+        const action: ActionKind =
+          t.severity === "CRIT" ? "QUARANTINE" : t.severity === "HIGH" ? "BLOCK_IP" : "RAISE_ALERT";
+        const nextStatus: ThreatStatus =
+          action === "BLOCK_IP" ? "BLOCKED" : action === "QUARANTINE" ? "QUARANTINED" : "ESCALATED";
+        newAudits.push({
+          id: nid(),
+          ts: now,
+          actor: "SENTINEL/9",
+          action,
+          threatId: t.id,
+          target: action === "BLOCK_IP" ? t.src : t.target,
+          detail: `Auto-runbook executed on ${t.severity} threat ${t.type}.`,
+        });
+        return { ...t, status: nextStatus };
+      });
+      if (newAudits.length) setAudit((a) => [...newAudits, ...a].slice(0, 40));
+      return next;
+    });
+  }, []);
+
+  const activeCount = useMemo(() => threats.filter((t) => t.status === "ACTIVE").length, [threats]);
 
   return (
     <div className="relative min-h-screen overflow-hidden">
