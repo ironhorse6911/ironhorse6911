@@ -171,6 +171,15 @@ function FortressPage() {
       detail: "Neural core online. Command deck armed.",
     },
   ]);
+
+  // Rolling telemetry — synced with mitigation actions
+  const [packetBars, setPacketBars] = useState<number[]>([62, 78, 55, 92, 71, 84, 66, 95, 73, 88, 79, 91]);
+  const [containBars, setContainBars] = useState<number[]>([22, 34, 41, 28, 62, 48, 55, 73, 44, 66, 51, 82]);
+  const [decepBars, setDecepBars] = useState<number[]>([10, 14, 22, 18, 34, 28, 42, 31, 55, 47, 62, 71]);
+  const [containedTotal, setContainedTotal] = useState(1204);
+  const [decepTotal, setDecepTotal] = useState(87);
+  const [packetRate, setPacketRate] = useState(18.42);
+
   const streamLiveRef = useRef(streamLive);
   streamLiveRef.current = streamLive;
 
@@ -184,7 +193,19 @@ function FortressPage() {
       setClock(`${hh}:${mm}:${ss}`);
     }, 1000);
 
-    // live threat stream
+    const teleT = setInterval(() => {
+      setPacketBars((b) => [...b.slice(1), 50 + Math.floor(Math.random() * 48)]);
+      setContainBars((b) => [
+        ...b.slice(1),
+        Math.max(10, b[b.length - 1] - 6 + Math.floor(Math.random() * 8)),
+      ]);
+      setDecepBars((b) => [
+        ...b.slice(1),
+        Math.max(6, b[b.length - 1] - 4 + Math.floor(Math.random() * 6)),
+      ]);
+      setPacketRate(16 + Math.random() * 6);
+    }, 1500);
+
     let feedT: ReturnType<typeof setTimeout>;
     const schedule = () => {
       const delay = 1600 + Math.random() * 2600;
@@ -199,8 +220,29 @@ function FortressPage() {
 
     return () => {
       clearInterval(clockT);
+      clearInterval(teleT);
       clearTimeout(feedT);
     };
+  }, []);
+
+  const bumpTelemetry = useCallback((action: ActionKind) => {
+    if (action === "BLOCK_IP" || action === "QUARANTINE") {
+      setContainBars((b) => [
+        ...b.slice(1),
+        Math.min(100, b[b.length - 1] + 18 + Math.floor(Math.random() * 12)),
+      ]);
+      setContainedTotal((n) => n + 1);
+    }
+    if (action === "RAISE_ALERT") {
+      setDecepBars((b) => [
+        ...b.slice(1),
+        Math.min(100, b[b.length - 1] + 22 + Math.floor(Math.random() * 10)),
+      ]);
+      setDecepTotal((n) => n + 1);
+    }
+    if (action === "QUARANTINE") {
+      setPacketBars((b) => [...b.slice(1), Math.min(100, 88 + Math.floor(Math.random() * 10))]);
+    }
   }, []);
 
   const runAction = useCallback(
@@ -234,20 +276,25 @@ function FortressPage() {
           ...prev,
         ].slice(0, 40),
       );
+      bumpTelemetry(action);
     },
-    [],
+    [bumpTelemetry],
   );
 
   const autoContainAll = useCallback(() => {
     setThreats((prev) => {
       const now = Date.now();
       const newAudits: AuditEntry[] = [];
+      let contained = 0;
+      let alerted = 0;
       const next = prev.map((t) => {
         if (t.status !== "ACTIVE") return t;
         const action: ActionKind =
           t.severity === "CRIT" ? "QUARANTINE" : t.severity === "HIGH" ? "BLOCK_IP" : "RAISE_ALERT";
         const nextStatus: ThreatStatus =
           action === "BLOCK_IP" ? "BLOCKED" : action === "QUARANTINE" ? "QUARANTINED" : "ESCALATED";
+        if (action === "RAISE_ALERT") alerted++;
+        else contained++;
         newAudits.push({
           id: nid(),
           ts: now,
@@ -260,8 +307,41 @@ function FortressPage() {
         return { ...t, status: nextStatus };
       });
       if (newAudits.length) setAudit((a) => [...newAudits, ...a].slice(0, 40));
+      if (contained) {
+        setContainedTotal((n) => n + contained);
+        setContainBars((b) => [
+          ...b.slice(1),
+          Math.min(100, 78 + Math.floor(Math.random() * 20)),
+        ]);
+      }
+      if (alerted) {
+        setDecepTotal((n) => n + alerted);
+        setDecepBars((b) => [
+          ...b.slice(1),
+          Math.min(100, 72 + Math.floor(Math.random() * 20)),
+        ]);
+      }
       return next;
     });
+  }, []);
+
+  const selfHeal = useCallback(() => {
+    setPacketBars((b) => [...b.slice(1), 92 + Math.floor(Math.random() * 8)]);
+    setContainBars((b) => [...b.slice(1), Math.min(100, b[b.length - 1] + 10)]);
+    setAudit((prev) =>
+      [
+        {
+          id: nid(),
+          ts: Date.now(),
+          actor: "SENTINEL/9",
+          action: "RAISE_ALERT" as ActionKind,
+          threatId: "HEAL-" + nid().slice(0, 4),
+          target: "fortress-core",
+          detail: "MEDIC: standing credentials rotated, WAF rules regenerated, enclaves resealed.",
+        },
+        ...prev,
+      ].slice(0, 40),
+    );
   }, []);
 
   const activeCount = useMemo(() => threats.filter((t) => t.status === "ACTIVE").length, [threats]);
