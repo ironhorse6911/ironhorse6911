@@ -672,6 +672,74 @@ function FortressPage() {
 
 /* -------------------------- sub components -------------------------- */
 
+function ThreatRow({
+  threat,
+  onAction,
+}: {
+  threat: Threat;
+  onAction: (t: Threat, a: ActionKind, actor: "AGENT" | "OPERATOR") => void;
+}) {
+  const sevColor: Record<Severity, string> = {
+    LOW: "border-muted-foreground/40 bg-muted-foreground/10 text-muted-foreground",
+    MED: "border-primary/50 bg-primary/10 text-primary",
+    HIGH: "border-accent/50 bg-accent/10 text-accent",
+    CRIT: "border-danger/60 bg-danger/15 text-danger animate-flicker",
+  };
+  const statusColor: Record<ThreatStatus, string> = {
+    ACTIVE: "text-danger",
+    BLOCKED: "text-primary",
+    QUARANTINED: "text-neon",
+    ESCALATED: "text-accent",
+  };
+  const isActive = threat.status === "ACTIVE";
+  return (
+    <li className="grid gap-3 p-4 font-mono text-xs sm:grid-cols-[auto_1fr_auto] sm:items-center">
+      <div className="flex items-center gap-3">
+        <span
+          className={`clip-notch border px-2 py-0.5 text-[10px] font-bold tracking-[0.2em] ${sevColor[threat.severity]}`}
+        >
+          {threat.severity}
+        </span>
+        <span className="text-muted-foreground">{fmtClock(threat.ts)}</span>
+      </div>
+      <div className="min-w-0">
+        <div className="truncate text-foreground">
+          {threat.type} <span className="text-muted-foreground">·</span> {threat.src}{" "}
+          <span className="text-muted-foreground">→</span> {threat.target}
+        </div>
+        <div className="mt-0.5 flex items-center gap-2 text-[10px] uppercase tracking-[0.25em]">
+          <span className="text-muted-foreground">status</span>
+          <span className={`font-bold ${statusColor[threat.status]}`}>{threat.status}</span>
+          <span className="text-muted-foreground">· id {threat.id}</span>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1.5 sm:justify-end">
+        <button
+          disabled={!isActive}
+          onClick={() => onAction(threat, "BLOCK_IP", "OPERATOR")}
+          className="clip-notch border border-primary/60 bg-primary/10 px-2.5 py-1 text-[10px] font-bold tracking-[0.2em] text-primary transition-colors hover:bg-primary/25 disabled:opacity-30"
+        >
+          block ip
+        </button>
+        <button
+          disabled={!isActive}
+          onClick={() => onAction(threat, "QUARANTINE", "OPERATOR")}
+          className="clip-notch border border-neon/60 bg-neon/10 px-2.5 py-1 text-[10px] font-bold tracking-[0.2em] text-neon transition-colors hover:bg-neon/25 disabled:opacity-30"
+        >
+          quarantine
+        </button>
+        <button
+          disabled={!isActive}
+          onClick={() => onAction(threat, "RAISE_ALERT", "OPERATOR")}
+          className="clip-notch border border-accent/60 bg-accent/10 px-2.5 py-1 text-[10px] font-bold tracking-[0.2em] text-accent transition-colors hover:bg-accent/25 disabled:opacity-30"
+        >
+          raise alert
+        </button>
+      </div>
+    </li>
+  );
+}
+
 function SectionHeader({ num, title, sub }: { num: string; title: string; sub: string }) {
   return (
     <div className="max-w-3xl">
