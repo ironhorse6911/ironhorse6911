@@ -86,10 +86,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         property: "og:description",
         content:
-          "Autonomous AI agent defending your infrastructure in real time. Zero-latency threat neutralization.",
+          "SENTINEL/9 is an autonomous AI security agent that hardens your perimeter, hunts threats in real time, and neutralizes intrusions before they land.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "SENTINEL/9 — Autonomous AI Cyber Fortress" },
+      { name: "twitter:description", content: "SENTINEL/9 is an autonomous AI security agent that hardens your perimeter, hunts threats in real time, and neutralizes intrusions before they land." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/bbe3316e-40aa-4ee7-b5c6-1bc90bf2fcd9/id-preview-a4055727--cdc594d3-9ef1-44ba-bd69-1ec2c49219db.lovable.app-1784163453987.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/bbe3316e-40aa-4ee7-b5c6-1bc90bf2fcd9/id-preview-a4055727--cdc594d3-9ef1-44ba-bd69-1ec2c49219db.lovable.app-1784163453987.png" },
     ],
     links: [
       {
