@@ -805,6 +805,26 @@ function FortressPage() {
         </div>
       </section>
 
+      {/* AUTONOMOUS OPERATORS */}
+      <section id="operators" className="relative z-10 mx-auto max-w-7xl px-6 py-24">
+        <SectionHeader
+          num="//02.5"
+          title="Five operators. Zero standing trust."
+          sub="Each sub-agent runs its own loop, its own mandate, its own runbook. Arm one, disarm one, watch them fight for the fortress."
+        />
+        <div className="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {OPERATORS.map((op) => (
+            <OperatorCard
+              key={op.id}
+              op={op}
+              runtime={operators[op.id]}
+              onToggle={() => toggleOperator(op.id)}
+            />
+          ))}
+        </div>
+      </section>
+
+
       {/* CAPABILITIES GRID */}
       <section id="grid" className="relative z-10 mx-auto max-w-7xl px-6 py-24">
         <SectionHeader
