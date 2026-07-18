@@ -442,9 +442,111 @@ function FortressPage() {
         ...prev,
       ].slice(0, 40),
     );
+
+  /* ---- autonomous operators ---- */
+  const [operators, setOperators] = useState<Record<OperatorId, OperatorRuntime>>(() =>
+    initialOperatorState(),
+  );
+  const operatorsRef = useRef(operators);
+  operatorsRef.current = operators;
+  const threatsRef = useRef(threats);
+  threatsRef.current = threats;
+
+  const toggleOperator = useCallback((id: OperatorId) => {
+    setOperators((prev) => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        armed: !prev[id].armed,
+        status: !prev[id].armed ? "SCANNING" : "IDLE",
+      },
+    }));
   }, []);
 
+  const pushOperatorActivity = useCallback((id: OperatorId, text: string) => {
+    setOperators((prev) => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        activity: [{ id: nid(), ts: Date.now(), text }, ...prev[id].activity].slice(0, 6),
+      },
+    }));
+  }, []);
+
+  // Autonomous operator heartbeats — each operator scans and acts on its specialty.
+  useEffect(() => {
+    const runOnce = (op: OperatorDef) => {
+      const state = operatorsRef.current[op.id];
+      if (!state.armed) return;
+
+      // Load telemetry drift
+      setOperators((prev) => ({
+        ...prev,
+        [op.id]: {
+          ...prev[op.id],
+          load: Math.max(
+            18,
+            Math.min(96, prev[op.id].load + Math.floor(Math.random() * 14) - 6),
+          ),
+          status: "SCANNING",
+        },
+      }));
+
+      if (op.action === "SELF_HEAL") {
+        if (Math.random() < 0.22) {
+          selfHeal();
+          setOperators((prev) => ({
+            ...prev,
+            [op.id]: {
+              ...prev[op.id],
+              status: "RECOVERING",
+              actions: prev[op.id].actions + 1,
+              activity: [
+                {
+                  id: nid(),
+                  ts: Date.now(),
+                  text: "Regen cycle: rotated keys, resealed enclaves, patched WAF.",
+                },
+                ...prev[op.id].activity,
+              ].slice(0, 6),
+            },
+          }));
+        }
+        return;
+      }
+
+      const target = threatsRef.current.find(
+        (t) => t.status === "ACTIVE" && op.specialty.includes(t.type),
+      );
+      if (!target) return;
+
+      setOperators((prev) => ({
+        ...prev,
+        [op.id]: {
+          ...prev[op.id],
+          status: "ENGAGING",
+          actions: prev[op.id].actions + 1,
+          activity: [
+            {
+              id: nid(),
+              ts: Date.now(),
+              text: `${op.action.replace("_", " ")} on ${target.type} · ${target.src} → ${target.target}`,
+            },
+            ...prev[op.id].activity,
+          ].slice(0, 6),
+        },
+      }));
+      runAction(target, op.action as ActionKind, "AGENT");
+    };
+
+    const timers = OPERATORS.map((op) =>
+      setInterval(() => runOnce(op), 2200 + Math.random() * 1800),
+    );
+    return () => timers.forEach(clearInterval);
+  }, [runAction, selfHeal]);
+
   const activeCount = useMemo(() => threats.filter((t) => t.status === "ACTIVE").length, [threats]);
+
 
   return (
     <div className="relative min-h-screen overflow-hidden">
