@@ -1053,7 +1053,123 @@ function ThreatRow({
   );
 }
 
+function OperatorCard({
+  op,
+  runtime,
+  onToggle,
+}: {
+  op: OperatorDef;
+  runtime: OperatorRuntime;
+  onToggle: () => void;
+}) {
+  const tone: Record<OperatorTone, { text: string; border: string; bg: string; glow: string; bar: string }> = {
+    cyan:    { text: "text-primary", border: "border-primary/50",       bg: "bg-primary/10",       glow: "shadow-neon-cyan",  bar: "bg-primary" },
+    magenta: { text: "text-accent",  border: "border-accent/50",        bg: "bg-accent/10",        glow: "shadow-neon-magenta", bar: "bg-accent" },
+    neon:    { text: "text-neon",    border: "border-neon/50",          bg: "bg-neon/10",          glow: "shadow-neon-green", bar: "bg-neon" },
+    gold:    { text: "text-[oklch(0.85_0.18_85)]", border: "border-[oklch(0.85_0.18_85)]/50", bg: "bg-[oklch(0.85_0.18_85)]/10", glow: "shadow-neon-cyan", bar: "bg-[oklch(0.85_0.18_85)]" },
+    danger:  { text: "text-danger",  border: "border-danger/60",        bg: "bg-danger/10",        glow: "shadow-neon-magenta", bar: "bg-danger" },
+  };
+  const t = tone[op.tone];
+  const statusLabel = runtime.armed ? runtime.status : "STANDBY";
+  const statusPulse = runtime.status === "ENGAGING" ? "animate-flicker" : "";
+
+  return (
+    <article
+      className={`clip-notch relative overflow-hidden border ${runtime.armed ? t.border : "border-border/60"} bg-card/50 p-5 backdrop-blur-xl transition-all ${runtime.armed ? "hover:-translate-y-1" : "opacity-70"}`}
+    >
+      <div className={`pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent ${runtime.armed ? t.bar : "bg-border/40"} to-transparent opacity-60`} />
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div
+            className={`clip-notch flex h-11 w-11 items-center justify-center border ${t.border} ${t.bg} font-display text-lg ${t.text} ${runtime.armed ? t.glow : ""}`}
+          >
+            {op.glyph}
+          </div>
+          <div>
+            <div className={`font-display text-base font-bold uppercase tracking-[0.2em] ${t.text}`}>
+              {op.callsign}
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+              {op.role}
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={onToggle}
+          className={`clip-notch border px-2.5 py-1 text-[10px] font-bold tracking-[0.25em] transition-colors ${
+            runtime.armed
+              ? "border-neon/60 bg-neon/10 text-neon"
+              : "border-danger/60 bg-danger/10 text-danger"
+          }`}
+        >
+          {runtime.armed ? "◉ armed" : "◯ disarmed"}
+        </button>
+      </div>
+
+      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">{op.brief}</p>
+
+      <div className="mt-3 border-l-2 border-border/60 pl-3 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+        mandate — <span className={t.text}>{op.mandate}</span>
+      </div>
+
+      {op.specialty.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {op.specialty.map((s) => (
+            <span
+              key={s}
+              className={`border ${t.border} ${t.bg} px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.2em] ${t.text}`}
+            >
+              {s}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-4 grid grid-cols-3 gap-2 text-[10px] uppercase tracking-[0.25em]">
+        <div>
+          <div className="text-muted-foreground">status</div>
+          <div className={`font-bold ${t.text} ${statusPulse}`}>{statusLabel}</div>
+        </div>
+        <div>
+          <div className="text-muted-foreground">actions</div>
+          <div className={`font-mono font-bold ${t.text}`}>{runtime.actions}</div>
+        </div>
+        <div>
+          <div className="text-muted-foreground">load</div>
+          <div className={`font-mono font-bold ${t.text}`}>{runtime.load}%</div>
+        </div>
+      </div>
+
+      <div className="mt-2 h-1 w-full overflow-hidden bg-border/50">
+        <div
+          className={`h-full ${runtime.armed ? t.bar : "bg-border/40"} transition-[width] duration-500`}
+          style={{ width: `${runtime.load}%` }}
+        />
+      </div>
+
+      <div className="mt-4 border-t border-border/60 pt-3">
+        <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+          activity feed
+        </div>
+        <ul className="mt-2 space-y-1 font-mono text-[10px] leading-snug">
+          {runtime.activity.length === 0 ? (
+            <li className="text-muted-foreground">// {runtime.armed ? "listening…" : "offline"}</li>
+          ) : (
+            runtime.activity.map((a) => (
+              <li key={a.id} className="flex gap-2">
+                <span className="text-primary">{fmtClock(a.ts)}</span>
+                <span className="text-muted-foreground">{a.text}</span>
+              </li>
+            ))
+          )}
+        </ul>
+      </div>
+    </article>
+  );
+}
+
 function SectionHeader({ num, title, sub }: { num: string; title: string; sub: string }) {
+
   return (
     <div className="max-w-3xl">
       <div className="mb-3 font-mono text-[11px] uppercase tracking-[0.4em] text-primary">
