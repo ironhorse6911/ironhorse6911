@@ -141,6 +141,106 @@ const agentLog = [
   { role: "agent", text: "Keys rotated. Enclave sealed. Threat neutralized in 1.4s. Incident #C-7742 archived." },
 ];
 
+/* ---------------- autonomous operators ---------------- */
+
+type OperatorId = "SENTRY" | "HUNTER" | "WARDEN" | "REFLEX" | "MEDIC";
+type OperatorTone = "cyan" | "magenta" | "neon" | "gold" | "danger";
+
+type OperatorDef = {
+  id: OperatorId;
+  callsign: string;
+  role: string;
+  brief: string;
+  mandate: string;
+  specialty: string[];
+  action: ActionKind | "SELF_HEAL";
+  tone: OperatorTone;
+  glyph: string;
+};
+
+const OPERATORS: OperatorDef[] = [
+  {
+    id: "SENTRY",
+    callsign: "SENTRY-01",
+    role: "Perimeter warden",
+    brief: "eBPF + WAF rewrites at wire speed. Neutralizes noise at the edge.",
+    mandate: "Null hostile ingress before it touches an app socket.",
+    specialty: ["DDOS L7", "SSH BRUTE", "TOR RECON"],
+    action: "BLOCK_IP",
+    tone: "cyan",
+    glyph: "◈",
+  },
+  {
+    id: "HUNTER",
+    callsign: "HUNTER-04",
+    role: "Intent tracker",
+    brief: "Behavioral graph over logs and traces. Surfaces motive, not signature.",
+    mandate: "Correlate weak signals into named adversary intent.",
+    specialty: ["CREDENTIAL STUFF", "EXFIL BEACON", "MALWARE C2"],
+    action: "RAISE_ALERT",
+    tone: "magenta",
+    glyph: "◉",
+  },
+  {
+    id: "WARDEN",
+    callsign: "WARDEN-07",
+    role: "Identity & keys",
+    brief: "Hardware-attested identity + rotating enclaves. Sanctifies every workload.",
+    mandate: "Revoke, rotate, reseal on the faintest suspicion.",
+    specialty: ["PRIV ESC", "LATERAL MOVE", "SQL INJECTION"],
+    action: "QUARANTINE",
+    tone: "gold",
+    glyph: "⬢",
+  },
+  {
+    id: "REFLEX",
+    callsign: "REFLEX-02",
+    role: "Containment reflex",
+    brief: "Deterministic runbooks. Isolates blast radius in milliseconds.",
+    mandate: "Sever, seal, snapshot — no human latency.",
+    specialty: ["ZERO-DAY PROBE", "KERNEL EXPLOIT"],
+    action: "QUARANTINE",
+    tone: "danger",
+    glyph: "▲",
+  },
+  {
+    id: "MEDIC",
+    callsign: "MEDIC-09",
+    role: "Self-heal & restore",
+    brief: "Regenerates credentials, WAF rules, enclave seals. Keeps the fortress whole.",
+    mandate: "Continuous regeneration. Zero standing trust.",
+    specialty: [],
+    action: "SELF_HEAL",
+    tone: "neon",
+    glyph: "✚",
+  },
+];
+
+type OperatorRuntime = {
+  armed: boolean;
+  status: "IDLE" | "SCANNING" | "ENGAGING" | "RECOVERING";
+  actions: number;
+  load: number;
+  activity: { id: string; ts: number; text: string }[];
+};
+
+function initialOperatorState(): Record<OperatorId, OperatorRuntime> {
+  const base = (): OperatorRuntime => ({
+    armed: true,
+    status: "SCANNING",
+    actions: 0,
+    load: 24 + Math.floor(Math.random() * 20),
+    activity: [],
+  });
+  return {
+    SENTRY: base(),
+    HUNTER: base(),
+    WARDEN: base(),
+    REFLEX: base(),
+    MEDIC: base(),
+  };
+}
+
 function seedThreat(now: number): Threat {
   return {
     id: nid(),
@@ -344,7 +444,111 @@ function FortressPage() {
     );
   }, []);
 
+  /* ---- autonomous operators ---- */
+
+  const [operators, setOperators] = useState<Record<OperatorId, OperatorRuntime>>(() =>
+    initialOperatorState(),
+  );
+  const operatorsRef = useRef(operators);
+  operatorsRef.current = operators;
+  const threatsRef = useRef(threats);
+  threatsRef.current = threats;
+
+  const toggleOperator = useCallback((id: OperatorId) => {
+    setOperators((prev) => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        armed: !prev[id].armed,
+        status: !prev[id].armed ? "SCANNING" : "IDLE",
+      },
+    }));
+  }, []);
+
+  const pushOperatorActivity = useCallback((id: OperatorId, text: string) => {
+    setOperators((prev) => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        activity: [{ id: nid(), ts: Date.now(), text }, ...prev[id].activity].slice(0, 6),
+      },
+    }));
+  }, []);
+
+  // Autonomous operator heartbeats — each operator scans and acts on its specialty.
+  useEffect(() => {
+    const runOnce = (op: OperatorDef) => {
+      const state = operatorsRef.current[op.id];
+      if (!state.armed) return;
+
+      // Load telemetry drift
+      setOperators((prev) => ({
+        ...prev,
+        [op.id]: {
+          ...prev[op.id],
+          load: Math.max(
+            18,
+            Math.min(96, prev[op.id].load + Math.floor(Math.random() * 14) - 6),
+          ),
+          status: "SCANNING",
+        },
+      }));
+
+      if (op.action === "SELF_HEAL") {
+        if (Math.random() < 0.22) {
+          selfHeal();
+          setOperators((prev) => ({
+            ...prev,
+            [op.id]: {
+              ...prev[op.id],
+              status: "RECOVERING",
+              actions: prev[op.id].actions + 1,
+              activity: [
+                {
+                  id: nid(),
+                  ts: Date.now(),
+                  text: "Regen cycle: rotated keys, resealed enclaves, patched WAF.",
+                },
+                ...prev[op.id].activity,
+              ].slice(0, 6),
+            },
+          }));
+        }
+        return;
+      }
+
+      const target = threatsRef.current.find(
+        (t) => t.status === "ACTIVE" && op.specialty.includes(t.type),
+      );
+      if (!target) return;
+
+      setOperators((prev) => ({
+        ...prev,
+        [op.id]: {
+          ...prev[op.id],
+          status: "ENGAGING",
+          actions: prev[op.id].actions + 1,
+          activity: [
+            {
+              id: nid(),
+              ts: Date.now(),
+              text: `${op.action.replace("_", " ")} on ${target.type} · ${target.src} → ${target.target}`,
+            },
+            ...prev[op.id].activity,
+          ].slice(0, 6),
+        },
+      }));
+      runAction(target, op.action as ActionKind, "AGENT");
+    };
+
+    const timers = OPERATORS.map((op) =>
+      setInterval(() => runOnce(op), 2200 + Math.random() * 1800),
+    );
+    return () => timers.forEach(clearInterval);
+  }, [runAction, selfHeal]);
+
   const activeCount = useMemo(() => threats.filter((t) => t.status === "ACTIVE").length, [threats]);
+
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -369,10 +573,12 @@ function FortressPage() {
           </a>
           <nav className="hidden gap-8 text-xs uppercase tracking-[0.25em] text-muted-foreground md:flex">
             <a className="hover:text-primary transition-colors" href="#agent">Agent</a>
+            <a className="hover:text-primary transition-colors" href="#operators">Operators</a>
             <a className="hover:text-primary transition-colors" href="#grid">Grid</a>
             <a className="hover:text-primary transition-colors" href="#telemetry">Telemetry</a>
             <a className="hover:text-primary transition-colors" href="#deploy">Deploy</a>
           </nav>
+
           <div className="flex items-center gap-3">
             <span className="hidden items-center gap-2 rounded-full border border-neon/40 bg-neon/10 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-neon sm:inline-flex">
               <span className="h-1.5 w-1.5 animate-flicker rounded-full bg-neon shadow-neon-green" />
@@ -598,6 +804,26 @@ function FortressPage() {
           </div>
         </div>
       </section>
+
+      {/* AUTONOMOUS OPERATORS */}
+      <section id="operators" className="relative z-10 mx-auto max-w-7xl px-6 py-24">
+        <SectionHeader
+          num="//02.5"
+          title="Five operators. Zero standing trust."
+          sub="Each sub-agent runs its own loop, its own mandate, its own runbook. Arm one, disarm one, watch them fight for the fortress."
+        />
+        <div className="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {OPERATORS.map((op) => (
+            <OperatorCard
+              key={op.id}
+              op={op}
+              runtime={operators[op.id]}
+              onToggle={() => toggleOperator(op.id)}
+            />
+          ))}
+        </div>
+      </section>
+
 
       {/* CAPABILITIES GRID */}
       <section id="grid" className="relative z-10 mx-auto max-w-7xl px-6 py-24">
@@ -827,7 +1053,123 @@ function ThreatRow({
   );
 }
 
+function OperatorCard({
+  op,
+  runtime,
+  onToggle,
+}: {
+  op: OperatorDef;
+  runtime: OperatorRuntime;
+  onToggle: () => void;
+}) {
+  const tone: Record<OperatorTone, { text: string; border: string; bg: string; glow: string; bar: string }> = {
+    cyan:    { text: "text-primary", border: "border-primary/50",       bg: "bg-primary/10",       glow: "shadow-neon-cyan",  bar: "bg-primary" },
+    magenta: { text: "text-accent",  border: "border-accent/50",        bg: "bg-accent/10",        glow: "shadow-neon-magenta", bar: "bg-accent" },
+    neon:    { text: "text-neon",    border: "border-neon/50",          bg: "bg-neon/10",          glow: "shadow-neon-green", bar: "bg-neon" },
+    gold:    { text: "text-[oklch(0.85_0.18_85)]", border: "border-[oklch(0.85_0.18_85)]/50", bg: "bg-[oklch(0.85_0.18_85)]/10", glow: "shadow-neon-cyan", bar: "bg-[oklch(0.85_0.18_85)]" },
+    danger:  { text: "text-danger",  border: "border-danger/60",        bg: "bg-danger/10",        glow: "shadow-neon-magenta", bar: "bg-danger" },
+  };
+  const t = tone[op.tone];
+  const statusLabel = runtime.armed ? runtime.status : "STANDBY";
+  const statusPulse = runtime.status === "ENGAGING" ? "animate-flicker" : "";
+
+  return (
+    <article
+      className={`clip-notch relative overflow-hidden border ${runtime.armed ? t.border : "border-border/60"} bg-card/50 p-5 backdrop-blur-xl transition-all ${runtime.armed ? "hover:-translate-y-1" : "opacity-70"}`}
+    >
+      <div className={`pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent ${runtime.armed ? t.bar : "bg-border/40"} to-transparent opacity-60`} />
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div
+            className={`clip-notch flex h-11 w-11 items-center justify-center border ${t.border} ${t.bg} font-display text-lg ${t.text} ${runtime.armed ? t.glow : ""}`}
+          >
+            {op.glyph}
+          </div>
+          <div>
+            <div className={`font-display text-base font-bold uppercase tracking-[0.2em] ${t.text}`}>
+              {op.callsign}
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+              {op.role}
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={onToggle}
+          className={`clip-notch border px-2.5 py-1 text-[10px] font-bold tracking-[0.25em] transition-colors ${
+            runtime.armed
+              ? "border-neon/60 bg-neon/10 text-neon"
+              : "border-danger/60 bg-danger/10 text-danger"
+          }`}
+        >
+          {runtime.armed ? "◉ armed" : "◯ disarmed"}
+        </button>
+      </div>
+
+      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">{op.brief}</p>
+
+      <div className="mt-3 border-l-2 border-border/60 pl-3 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+        mandate — <span className={t.text}>{op.mandate}</span>
+      </div>
+
+      {op.specialty.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {op.specialty.map((s) => (
+            <span
+              key={s}
+              className={`border ${t.border} ${t.bg} px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.2em] ${t.text}`}
+            >
+              {s}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-4 grid grid-cols-3 gap-2 text-[10px] uppercase tracking-[0.25em]">
+        <div>
+          <div className="text-muted-foreground">status</div>
+          <div className={`font-bold ${t.text} ${statusPulse}`}>{statusLabel}</div>
+        </div>
+        <div>
+          <div className="text-muted-foreground">actions</div>
+          <div className={`font-mono font-bold ${t.text}`}>{runtime.actions}</div>
+        </div>
+        <div>
+          <div className="text-muted-foreground">load</div>
+          <div className={`font-mono font-bold ${t.text}`}>{runtime.load}%</div>
+        </div>
+      </div>
+
+      <div className="mt-2 h-1 w-full overflow-hidden bg-border/50">
+        <div
+          className={`h-full ${runtime.armed ? t.bar : "bg-border/40"} transition-[width] duration-500`}
+          style={{ width: `${runtime.load}%` }}
+        />
+      </div>
+
+      <div className="mt-4 border-t border-border/60 pt-3">
+        <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+          activity feed
+        </div>
+        <ul className="mt-2 space-y-1 font-mono text-[10px] leading-snug">
+          {runtime.activity.length === 0 ? (
+            <li className="text-muted-foreground">// {runtime.armed ? "listening…" : "offline"}</li>
+          ) : (
+            runtime.activity.map((a) => (
+              <li key={a.id} className="flex gap-2">
+                <span className="text-primary">{fmtClock(a.ts)}</span>
+                <span className="text-muted-foreground">{a.text}</span>
+              </li>
+            ))
+          )}
+        </ul>
+      </div>
+    </article>
+  );
+}
+
 function SectionHeader({ num, title, sub }: { num: string; title: string; sub: string }) {
+
   return (
     <div className="max-w-3xl">
       <div className="mb-3 font-mono text-[11px] uppercase tracking-[0.4em] text-primary">
