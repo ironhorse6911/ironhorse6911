@@ -573,10 +573,12 @@ function FortressPage() {
           </a>
           <nav className="hidden gap-8 text-xs uppercase tracking-[0.25em] text-muted-foreground md:flex">
             <a className="hover:text-primary transition-colors" href="#agent">Agent</a>
+            <a className="hover:text-primary transition-colors" href="#operators">Operators</a>
             <a className="hover:text-primary transition-colors" href="#grid">Grid</a>
             <a className="hover:text-primary transition-colors" href="#telemetry">Telemetry</a>
             <a className="hover:text-primary transition-colors" href="#deploy">Deploy</a>
           </nav>
+
           <div className="flex items-center gap-3">
             <span className="hidden items-center gap-2 rounded-full border border-neon/40 bg-neon/10 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-neon sm:inline-flex">
               <span className="h-1.5 w-1.5 animate-flicker rounded-full bg-neon shadow-neon-green" />
