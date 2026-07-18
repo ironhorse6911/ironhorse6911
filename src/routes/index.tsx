@@ -442,8 +442,10 @@ function FortressPage() {
         ...prev,
       ].slice(0, 40),
     );
+  }, []);
 
   /* ---- autonomous operators ---- */
+
   const [operators, setOperators] = useState<Record<OperatorId, OperatorRuntime>>(() =>
     initialOperatorState(),
   );
