@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "sdk_version": "0.23.0",
+  "path": "/mcp",
+  "auth": {
+    "type": "none"
+  },
+  "mcp": {
+    "server": {
+      "name": "sentinel9-mcp",
+      "version": "0.1.0",
+      "title": "SENTINEL/9 Fortress MCP"
+    },
+    "tools": [
+      {
+        "name": "fortress_status",
+        "title": "Get fortress status",
+        "description": "Return the current simulated SENTINEL/9 fortress status: shield integrity, threat posture, active mitigations, and uptime.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_agents",
+        "title": "List fortress agents",
+        "description": "List the autonomous agents coordinated by the SENTINEL/9 orchestrator and their roles.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "generate_threat_briefing",
+        "title": "Generate threat briefing",
+        "description": "Produce a simulated threat briefing with a random attacker signature, severity, and recommended containment runbook. Read-only demo data.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "count": {
+              "default": 3,
+              "description": "How many simulated threats to include in the briefing (1-10).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            }
+          }
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
