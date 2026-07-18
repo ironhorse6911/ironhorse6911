@@ -141,6 +141,106 @@ const agentLog = [
   { role: "agent", text: "Keys rotated. Enclave sealed. Threat neutralized in 1.4s. Incident #C-7742 archived." },
 ];
 
+/* ---------------- autonomous operators ---------------- */
+
+type OperatorId = "SENTRY" | "HUNTER" | "WARDEN" | "REFLEX" | "MEDIC";
+type OperatorTone = "cyan" | "magenta" | "neon" | "gold" | "danger";
+
+type OperatorDef = {
+  id: OperatorId;
+  callsign: string;
+  role: string;
+  brief: string;
+  mandate: string;
+  specialty: string[];
+  action: ActionKind | "SELF_HEAL";
+  tone: OperatorTone;
+  glyph: string;
+};
+
+const OPERATORS: OperatorDef[] = [
+  {
+    id: "SENTRY",
+    callsign: "SENTRY-01",
+    role: "Perimeter warden",
+    brief: "eBPF + WAF rewrites at wire speed. Neutralizes noise at the edge.",
+    mandate: "Null hostile ingress before it touches an app socket.",
+    specialty: ["DDOS L7", "SSH BRUTE", "TOR RECON"],
+    action: "BLOCK_IP",
+    tone: "cyan",
+    glyph: "◈",
+  },
+  {
+    id: "HUNTER",
+    callsign: "HUNTER-04",
+    role: "Intent tracker",
+    brief: "Behavioral graph over logs and traces. Surfaces motive, not signature.",
+    mandate: "Correlate weak signals into named adversary intent.",
+    specialty: ["CREDENTIAL STUFF", "EXFIL BEACON", "MALWARE C2"],
+    action: "RAISE_ALERT",
+    tone: "magenta",
+    glyph: "◉",
+  },
+  {
+    id: "WARDEN",
+    callsign: "WARDEN-07",
+    role: "Identity & keys",
+    brief: "Hardware-attested identity + rotating enclaves. Sanctifies every workload.",
+    mandate: "Revoke, rotate, reseal on the faintest suspicion.",
+    specialty: ["PRIV ESC", "LATERAL MOVE", "SQL INJECTION"],
+    action: "QUARANTINE",
+    tone: "gold",
+    glyph: "⬢",
+  },
+  {
+    id: "REFLEX",
+    callsign: "REFLEX-02",
+    role: "Containment reflex",
+    brief: "Deterministic runbooks. Isolates blast radius in milliseconds.",
+    mandate: "Sever, seal, snapshot — no human latency.",
+    specialty: ["ZERO-DAY PROBE", "KERNEL EXPLOIT"],
+    action: "QUARANTINE",
+    tone: "danger",
+    glyph: "▲",
+  },
+  {
+    id: "MEDIC",
+    callsign: "MEDIC-09",
+    role: "Self-heal & restore",
+    brief: "Regenerates credentials, WAF rules, enclave seals. Keeps the fortress whole.",
+    mandate: "Continuous regeneration. Zero standing trust.",
+    specialty: [],
+    action: "SELF_HEAL",
+    tone: "neon",
+    glyph: "✚",
+  },
+];
+
+type OperatorRuntime = {
+  armed: boolean;
+  status: "IDLE" | "SCANNING" | "ENGAGING" | "RECOVERING";
+  actions: number;
+  load: number;
+  activity: { id: string; ts: number; text: string }[];
+};
+
+function initialOperatorState(): Record<OperatorId, OperatorRuntime> {
+  const base = (): OperatorRuntime => ({
+    armed: true,
+    status: "SCANNING",
+    actions: 0,
+    load: 24 + Math.floor(Math.random() * 20),
+    activity: [],
+  });
+  return {
+    SENTRY: base(),
+    HUNTER: base(),
+    WARDEN: base(),
+    REFLEX: base(),
+    MEDIC: base(),
+  };
+}
+
 function seedThreat(now: number): Threat {
   return {
     id: nid(),
