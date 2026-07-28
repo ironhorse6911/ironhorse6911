@@ -1800,3 +1800,88 @@ function AgentChat({
     </div>
   );
 }
+
+function ModuleInspector({
+  module,
+  onClose,
+}: {
+  module: (typeof capabilities)[number];
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${module.name} module detail`}
+    >
+      <div
+        className="absolute inset-0 bg-background/85 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="clip-notch relative w-full max-w-2xl overflow-hidden border border-primary/50 bg-card/95 shadow-neon-cyan">
+        <div className="flex items-center justify-between border-b border-border/60 px-6 py-4">
+          <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            <span className="text-accent">//{module.code}</span>
+            <span>module inspection</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="border border-border/60 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+          >
+            close ✕
+          </button>
+        </div>
+
+        <div className="max-h-[70vh] overflow-y-auto p-6">
+          <h3 className="font-display text-2xl font-black uppercase tracking-wide text-primary text-glow-cyan">
+            {module.name}
+          </h3>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{module.desc}</p>
+          <p className="mt-3 text-sm leading-relaxed text-foreground/80">{module.brief}</p>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <div className="clip-notch border border-border/60 bg-background/50 p-4">
+              <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                throughput
+              </div>
+              <div className="mt-2 font-mono text-lg text-neon">{module.stat}</div>
+            </div>
+            <div className="clip-notch border border-border/60 bg-background/50 p-4">
+              <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                {module.metricLabel}
+              </div>
+              <div className="mt-2 font-mono text-lg text-accent">{module.metricValue}</div>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <div className="text-[10px] uppercase tracking-[0.3em] text-primary">subsystems</div>
+            <ul className="mt-3 space-y-2 font-mono text-xs text-muted-foreground">
+              {module.subsystems.map((s) => (
+                <li key={s} className="flex items-start gap-2">
+                  <span className="mt-[3px] h-1.5 w-1.5 shrink-0 bg-neon" />
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="mt-6 flex items-center gap-2 border-t border-border/60 pt-4 font-mono text-[10px] uppercase tracking-[0.3em] text-neon">
+            <span className="h-1.5 w-1.5 animate-pulse-glow rounded-full bg-neon" />
+            module online · autonomous
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
