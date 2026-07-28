@@ -256,21 +256,27 @@ function seedThreat(now: number): Threat {
 function FortressPage() {
   const [clock, setClock] = useState("00:00:00");
   const [streamLive, setStreamLive] = useState(true);
-  const [threats, setThreats] = useState<Threat[]>(() => {
+  const [threats, setThreats] = useState<Threat[]>([]);
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [activeModule, setActiveModule] = useState<(typeof capabilities)[number] | null>(null);
+
+  // Seed after hydration so SSR and client markup match
+  useEffect(() => {
     const now = Date.now();
-    return Array.from({ length: 5 }, (_, i) => seedThreat(now - i * 3200));
-  });
-  const [audit, setAudit] = useState<AuditEntry[]>([
-    {
-      id: nid(),
-      ts: Date.now(),
-      actor: "SENTINEL/9",
-      action: "RAISE_ALERT",
-      threatId: "BOOT-000",
-      target: "fortress-core",
-      detail: "Neural core online. Command deck armed.",
-    },
-  ]);
+    setThreats(Array.from({ length: 5 }, (_, i) => seedThreat(now - i * 3200)));
+    setAudit([
+      {
+        id: nid(),
+        ts: now,
+        actor: "SENTINEL/9",
+        action: "RAISE_ALERT",
+        threatId: "BOOT-000",
+        target: "fortress-core",
+        detail: "Neural core online. Command deck armed.",
+      },
+    ]);
+  }, []);
+
 
   // Rolling telemetry — synced with mitigation actions
   const [packetBars, setPacketBars] = useState<number[]>([62, 78, 55, 92, 71, 84, 66, 95, 73, 88, 79, 91]);
