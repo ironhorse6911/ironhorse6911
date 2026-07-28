@@ -92,36 +92,60 @@ const capabilities = [
     name: "Perimeter Grid",
     desc: "Adaptive WAF + eBPF kernel filters that rewrite themselves per attacker fingerprint.",
     stat: "18.4M packets/s",
+      subsystems: ["eBPF XDP drop plane","Adaptive WAF ruleset synthesis","TLS fingerprint (JA4) clustering","Anycast scrub redirection"],
+    metricLabel: "p99 filter latency",
+    metricValue: "41µs",
+    brief: "Rules recompiled per attacker fingerprint every 900ms. No signature feeds, no vendor lag.",
   },
   {
     code: "02",
     name: "Autonomous Hunter",
     desc: "LLM-driven agent pivots across logs, traces, and memory to surface intent before impact.",
     stat: "sub-40ms MTTD",
+      subsystems: ["Log/trace/memory pivoting","Intent classification (LLM)","Lateral-movement graphing","Pre-impact hypothesis ranking"],
+    metricLabel: "mean time to detect",
+    metricValue: "38ms",
+    brief: "Hunter forms a hypothesis, tests it against live telemetry, and escalates only what survives.",
   },
   {
     code: "03",
     name: "Deception Mesh",
     desc: "Dynamic honeytokens and phantom services fingerprint intrusions in real time.",
     stat: "12k decoys live",
+      subsystems: ["Rotating honeytokens","Phantom service emulation","Credential canaries","Attacker toolkit fingerprinting"],
+    metricLabel: "live decoys",
+    metricValue: "12,038",
+    brief: "Every decoy touch is a zero-false-positive signal — real users never find them.",
   },
   {
     code: "04",
     name: "Zero-Trust Vault",
     desc: "Hardware-attested identity for every workload, rotated on suspicion, not schedule.",
     stat: "0 standing keys",
+      subsystems: ["Hardware-attested workload identity","Suspicion-triggered rotation","Short-lived mTLS certs","Sealed enclave brokerage"],
+    metricLabel: "standing keys",
+    metricValue: "0",
+    brief: "Credentials exist for seconds. Rotation is an event response, not a calendar entry.",
   },
   {
     code: "05",
     name: "Response Reflex",
     desc: "Contain, isolate, rollback — the agent executes runbooks without human latency.",
     stat: "1.2s avg quench",
+      subsystems: ["Automated containment runbooks","Host quarantine + enclave seal","Edge null-routing","State rollback to last clean frame"],
+    metricLabel: "avg quench",
+    metricValue: "1.2s",
+    brief: "Reflex executes the runbook the moment confidence clears threshold, then reports.",
   },
   {
     code: "06",
     name: "Forensic Recall",
     desc: "Full-fidelity replay of every session, memory frame, and syscall for post-mortem.",
     stat: "90-day cold trace",
+      subsystems: ["Full-fidelity session replay","Syscall + memory frame capture","Immutable audit ledger","Chain-of-custody export"],
+    metricLabel: "cold trace window",
+    metricValue: "90 days",
+    brief: "Rewind any incident to the exact syscall. Exports are signed and court-ready.",
   },
 ];
 
@@ -256,21 +280,27 @@ function seedThreat(now: number): Threat {
 function FortressPage() {
   const [clock, setClock] = useState("00:00:00");
   const [streamLive, setStreamLive] = useState(true);
-  const [threats, setThreats] = useState<Threat[]>(() => {
+  const [threats, setThreats] = useState<Threat[]>([]);
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [activeModule, setActiveModule] = useState<(typeof capabilities)[number] | null>(null);
+
+  // Seed after hydration so SSR and client markup match
+  useEffect(() => {
     const now = Date.now();
-    return Array.from({ length: 5 }, (_, i) => seedThreat(now - i * 3200));
-  });
-  const [audit, setAudit] = useState<AuditEntry[]>([
-    {
-      id: nid(),
-      ts: Date.now(),
-      actor: "SENTINEL/9",
-      action: "RAISE_ALERT",
-      threatId: "BOOT-000",
-      target: "fortress-core",
-      detail: "Neural core online. Command deck armed.",
-    },
-  ]);
+    setThreats(Array.from({ length: 5 }, (_, i) => seedThreat(now - i * 3200)));
+    setAudit([
+      {
+        id: nid(),
+        ts: now,
+        actor: "SENTINEL/9",
+        action: "RAISE_ALERT",
+        threatId: "BOOT-000",
+        target: "fortress-core",
+        detail: "Neural core online. Command deck armed.",
+      },
+    ]);
+  }, []);
+
 
   // Rolling telemetry — synced with mitigation actions
   const [packetBars, setPacketBars] = useState<number[]>([62, 78, 55, 92, 71, 84, 66, 95, 73, 88, 79, 91]);
@@ -836,9 +866,12 @@ function FortressPage() {
         />
         <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {capabilities.map((c) => (
-            <article
+            <button
               key={c.code}
-              className="clip-notch group relative overflow-hidden border border-border/60 bg-card/50 p-6 backdrop-blur-xl transition-all hover:border-primary/60 hover:-translate-y-1"
+              type="button"
+              onClick={() => setActiveModule(c)}
+              aria-label={`Inspect ${c.name} module`}
+              className="clip-notch group relative cursor-pointer overflow-hidden border border-border/60 bg-card/50 p-6 text-left backdrop-blur-xl transition-all hover:border-primary/60 hover:-translate-y-1 focus:outline-none focus-visible:border-primary"
             >
               <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
               <div className="flex items-baseline justify-between">
@@ -855,8 +888,9 @@ function FortressPage() {
                 inspect module
                 <span className="transition-transform group-hover:translate-x-1">→</span>
               </div>
-            </article>
+            </button>
           ))}
+
         </div>
       </section>
 
@@ -975,12 +1009,17 @@ function FortressPage() {
         </div>
       </footer>
 
+      {activeModule && (
+        <ModuleInspector module={activeModule} onClose={() => setActiveModule(null)} />
+      )}
+
       <AgentChat
         threats={threats}
         onAction={runAction}
         onAutoContain={autoContainAll}
         onSelfHeal={selfHeal}
       />
+
     </div>
   );
 }
@@ -1758,6 +1797,91 @@ function AgentChat({
           </form>
         </div>
       )}
+    </div>
+  );
+}
+
+function ModuleInspector({
+  module,
+  onClose,
+}: {
+  module: (typeof capabilities)[number];
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${module.name} module detail`}
+    >
+      <div
+        className="absolute inset-0 bg-background/85 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="clip-notch relative w-full max-w-2xl overflow-hidden border border-primary/50 bg-card/95 shadow-neon-cyan">
+        <div className="flex items-center justify-between border-b border-border/60 px-6 py-4">
+          <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            <span className="text-accent">//{module.code}</span>
+            <span>module inspection</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="border border-border/60 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+          >
+            close ✕
+          </button>
+        </div>
+
+        <div className="max-h-[70vh] overflow-y-auto p-6">
+          <h3 className="font-display text-2xl font-black uppercase tracking-wide text-primary text-glow-cyan">
+            {module.name}
+          </h3>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{module.desc}</p>
+          <p className="mt-3 text-sm leading-relaxed text-foreground/80">{module.brief}</p>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <div className="clip-notch border border-border/60 bg-background/50 p-4">
+              <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                throughput
+              </div>
+              <div className="mt-2 font-mono text-lg text-neon">{module.stat}</div>
+            </div>
+            <div className="clip-notch border border-border/60 bg-background/50 p-4">
+              <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                {module.metricLabel}
+              </div>
+              <div className="mt-2 font-mono text-lg text-accent">{module.metricValue}</div>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <div className="text-[10px] uppercase tracking-[0.3em] text-primary">subsystems</div>
+            <ul className="mt-3 space-y-2 font-mono text-xs text-muted-foreground">
+              {module.subsystems.map((s) => (
+                <li key={s} className="flex items-start gap-2">
+                  <span className="mt-[3px] h-1.5 w-1.5 shrink-0 bg-neon" />
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="mt-6 flex items-center gap-2 border-t border-border/60 pt-4 font-mono text-[10px] uppercase tracking-[0.3em] text-neon">
+            <span className="h-1.5 w-1.5 animate-pulse-glow rounded-full bg-neon" />
+            module online · autonomous
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
