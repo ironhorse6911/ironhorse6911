@@ -866,9 +866,12 @@ function FortressPage() {
         />
         <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {capabilities.map((c) => (
-            <article
+            <button
               key={c.code}
-              className="clip-notch group relative overflow-hidden border border-border/60 bg-card/50 p-6 backdrop-blur-xl transition-all hover:border-primary/60 hover:-translate-y-1"
+              type="button"
+              onClick={() => setActiveModule(c)}
+              aria-label={`Inspect ${c.name} module`}
+              className="clip-notch group relative cursor-pointer overflow-hidden border border-border/60 bg-card/50 p-6 text-left backdrop-blur-xl transition-all hover:border-primary/60 hover:-translate-y-1 focus:outline-none focus-visible:border-primary"
             >
               <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
               <div className="flex items-baseline justify-between">
@@ -885,8 +888,9 @@ function FortressPage() {
                 inspect module
                 <span className="transition-transform group-hover:translate-x-1">→</span>
               </div>
-            </article>
+            </button>
           ))}
+
         </div>
       </section>
 
