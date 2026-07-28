@@ -577,6 +577,8 @@ function FortressPage() {
             <a className="hover:text-primary transition-colors" href="#grid">Grid</a>
             <a className="hover:text-primary transition-colors" href="#telemetry">Telemetry</a>
             <a className="hover:text-primary transition-colors" href="#deploy">Deploy</a>
+            <a className="hover:text-primary transition-colors" href="/admin">Admin</a>
+
           </nav>
 
           <div className="flex items-center gap-3">
