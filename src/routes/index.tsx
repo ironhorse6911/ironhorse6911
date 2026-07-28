@@ -1009,12 +1009,17 @@ function FortressPage() {
         </div>
       </footer>
 
+      {activeModule && (
+        <ModuleInspector module={activeModule} onClose={() => setActiveModule(null)} />
+      )}
+
       <AgentChat
         threats={threats}
         onAction={runAction}
         onAutoContain={autoContainAll}
         onSelfHeal={selfHeal}
       />
+
     </div>
   );
 }
