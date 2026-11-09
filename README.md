@@ -1,4 +1,4 @@
-# ironhorse6911
+# Cyber Citadel AI
 
 A modern full-stack TypeScript application built with TanStack Start, featuring a comprehensive UI component library and real-time database integration.
 
